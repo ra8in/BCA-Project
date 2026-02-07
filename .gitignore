@@ -54,3 +54,4 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 db_backup.json
+w.txt

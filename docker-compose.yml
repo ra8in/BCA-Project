@@ -20,7 +20,7 @@ services:
   backend:
     build:
       context: ./backend
-    command: sh /app/entrypoint.sh
+    command: bash /app/entrypoint.sh
     volumes:
       - ./backend:/app
       - ./docs/sharehub_home_data.json:/sharehub_home_data.json:ro
