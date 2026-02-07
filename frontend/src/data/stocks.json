@@ -1,0 +1,52 @@
+[
+    {
+        "id": 1,
+        "symbol": "NABIL",
+        "name": "Nabil Bank Limited",
+        "sector": "Commercial Banks",
+        "price": 520.00,
+        "change": 5.2,
+        "changePercent": 1.01,
+        "volume": 15430
+    },
+    {
+        "id": 2,
+        "symbol": "HIDCL",
+        "name": "Hydroelectricity Investment and Development Company Ltd",
+        "sector": "Hydro Power",
+        "price": 248.00,
+        "change": -2.0,
+        "changePercent": -0.8,
+        "volume": 4500
+    },
+    {
+        "id": 3,
+        "symbol": "SHIVM",
+        "name": "Shivam Cements Ltd",
+        "sector": "Manufacturing",
+        "price": 480.00,
+        "change": 10.0,
+        "changePercent": 2.13,
+        "volume": 8900
+    },
+    {
+        "id": 4,
+        "symbol": "NICA",
+        "name": "NIC Asia Bank Ltd",
+        "sector": "Commercial Banks",
+        "price": 710.00,
+        "change": 0.0,
+        "changePercent": 0.0,
+        "volume": 1200
+    },
+    {
+        "id": 5,
+        "symbol": "UPPER",
+        "name": "Upper Tamakoshi Hydropower Ltd",
+        "sector": "Hydro Power",
+        "price": 350.00,
+        "change": -5.0,
+        "changePercent": -1.41,
+        "volume": 22000
+    }
+]

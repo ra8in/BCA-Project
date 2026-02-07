@@ -1,0 +1,55 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+db.sqlite3
+*.log
+*.pot
+
+# Django
+staticfiles/
+media/
+
+# Environment Variables
+.env
+*.env
+!.env.example
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# OS Files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+*.sublime-workspace
+
+# Build artifacts
+build/
+*.egg-info/
+.eggs/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
