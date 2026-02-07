@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEPSE Pro | Advanced Paper Trading</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+    <div class="mobile-overlay"></div>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar collapsed">
+
+            <div class="sidebar-top">
+                <div class="menu-header">
+                    <i class="fa-solid fa-bars menu-toggle-btn" id="desktopToggle"></i>
+                </div>
+
+                <div class="new-action-btn" title="New Trade">
+                    <i class="fa-regular fa-pen-to-square"></i>
+                    <span>New Trade</span>
+                </div>
+
+                <div class="nav-menu">
+                    <div class="nav-label">Platform</div>
+                    <div class="nav-item active" data-target="dashboard">
+                        <i class="fa-solid fa-house"></i>
+                        <span>Home</span>
+                    </div>
+                    <div class="nav-item" data-target="market">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <span>Market</span>
+                    </div>
+                    <div class="nav-item" data-target="portfolio">
+                        <i class="fa-solid fa-wallet"></i>
+                        <span>Portfolio</span>
+                    </div>
+                    <div class="nav-item" data-target="trading">
+                        <i class="fa-solid fa-bolt"></i>
+                        <span>Trading</span>
+                    </div>
+                    <div class="nav-item" data-target="news">
+                        <i class="fa-regular fa-newspaper"></i>
+                        <span>News</span>
+                    </div>
+
+                    <div class="nav-label">Tools</div>
+                    <div class="nav-item" data-target="calculators">
+                        <i class="fa-solid fa-calculator"></i>
+                        <span>Tools</span>
+                    </div>
+                    <div class="nav-item" data-target="alerts">
+                        <i class="fa-solid fa-bell"></i>
+                        <span>Alerts</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-bottom">
+                <div class="nav-item" data-target="settings">
+                    <i class="fa-solid fa-gear"></i>
+                    <span>Settings</span>
+                </div>
+                <div class="nav-item">
+                    <i class="fa-solid fa-circle-question"></i>
+                    <span>Help</span>
+                </div>
+                <div class="location-badge">
+                    <span class="dot"></span> Kathmandu
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Sticky Header -->
+            <header>
+                <i class="fa-solid fa-bars mobile-menu-btn"></i>
+                <div class="welcome-text" style="font-size: 18px; margin:0; font-weight: 600;">Dashboard</div>
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" class="search-input" placeholder="Search Symbol, Company, News...">
+                </div>
+                <div class="user-actions">
+                    <button class="action-icon"><i class="fa-regular fa-envelope"></i></button>
+                    <button class="action-icon"><i class="fa-regular fa-bell"></i></button>
+
+                    <!-- Profile Dropdown Container -->
+                    <div class="user-profile-container">
+                        <div class="profile-trigger" id="profileTrigger">
+                            <img src="https://ui-avatars.com/api/?name=Trader+One&background=4359BE&color=fff"
+                                class="avatar-img">
+                            <span class="profile-name">Trader One</span> <!-- Hidden on mobile via CSS -->
+                            <i class="fa-solid fa-chevron-down profile-arrow"></i>
+                        </div>
+
+                        <!-- Dropdown Menu -->
+                        <div class="profile-dropdown" id="profileDropdown">
+                            <div class="dropdown-header">
+                                <div class="user-name">Trader One</div>
+                                <div class="user-email">trader.one@example.com</div>
+                            </div>
+                            <div class="dropdown-divider"></div>
+                            <div class="dropdown-item" data-target="settings">
+                                <i class="fa-regular fa-user"></i> My Profile
+                            </div>
+                            <div class="dropdown-item" data-target="settings">
+                                <i class="fa-solid fa-gear"></i> Settings
+                            </div>
+                            <div class="dropdown-divider"></div>
+                            <div class="dropdown-item text-danger">
+                                <i class="fa-solid fa-right-from-bracket"></i> Logout
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Scrollable Content -->
+            <div class="content-wrapper">
+
+                <!-- 1. DASHBOARD OVERVIEW -->
+                <section id="dashboard" class="section active">
+
+                    <div class="dashboard-header">
+                        <h1 class="welcome-text">Market Overview</h1>
+                        <div class="date-text"><i class="fa-regular fa-calendar"></i> <span id="currentDate">Jan 11,
+                                2026</span> • Market Closed</div>
+                    </div>
+
+                    <div class="stats-row">
+                        <div class="stat-card">
+                            <div class="stat-title">NEPSE Index</div>
+                            <div class="stat-value">2,640.54</div>
+                            <div class="stat-trend trend-up"><i class="fa-solid fa-arrow-up"></i> 4.59 (0.17%)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">SENSITIVE</div>
+                            <div class="stat-value">455.93</div>
+                            <div class="stat-trend trend-up"><i class="fa-solid fa-arrow-up"></i> 0.92 (0.20%)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">FLOAT</div>
+                            <div class="stat-value">181.26</div>
+                            <div class="stat-trend trend-up"><i class="fa-solid fa-arrow-up"></i> 0.45 (0.25%)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">SENS. FLOAT</div>
+                            <div class="stat-value">155.17</div>
+                            <div class="stat-trend trend-up"><i class="fa-solid fa-arrow-up"></i> 0.35 (0.23%)</div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-main">
+                        <div class="lg-card">
+                            <div class="card-header">
+                                <div>
+                                    <h3 class="stat-value">NABIL <span
+                                            style="font-size: 14px; color: var(--text-secondary); font-weight: 400;">Nabil
+                                            Bank Ltd.</span></h3>
+                                    <div class="text-up" style="font-weight: 600;">Rs. 1,240.00 (+2.4%)</div>
+                                </div>
+                                <div class="chart-controls">
+                                    <button>1D</button>
+                                    <button class="active">1W</button>
+                                    <button>1M</button>
+                                    <button>1Y</button>
+                                </div>
+                            </div>
+                            <div style="flex: 1; width: 100%; position: relative;">
+                                <canvas id="mainChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- REPLACED TRENDING WITH TOP GAINERS PREVIEW -->
+                        <div class="lg-card" style="min-height: auto;">
+                            <div class="card-header">
+                                <h3>Top Gainers</h3>
+                                <i class="fa-solid fa-arrow-trend-up" style="color: var(--color-success);"></i>
+                            </div>
+                            <div class="market-list">
+                                <div class="market-item">
+                                    <div class="symbol-box">
+                                        <div>
+                                            <div style="font-weight: 600;">SANVI</div>
+                                        </div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: 600;">795</div>
+                                        <div class="text-up" style="font-size: 11px;">+8.2%</div>
+                                    </div>
+                                </div>
+                                <div class="market-item">
+                                    <div class="symbol-box">
+                                        <div>
+                                            <div style="font-weight: 600;">SYPNL</div>
+                                        </div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: 600;">1,258</div>
+                                        <div class="text-up" style="font-size: 11px;">+5.7%</div>
+                                    </div>
+                                </div>
+                                <div class="market-item">
+                                    <div class="symbol-box">
+                                        <div>
+                                            <div style="font-weight: 600;">KKHC</div>
+                                        </div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: 600;">225.9</div>
+                                        <div class="text-up" style="font-size: 11px;">+4.6%</div>
+                                    </div>
+                                </div>
+                                <button class="btn-primary"
+                                    style="margin-top: 12px; width: 100%; background: var(--bg-input); color: var(--color-blue);">View
+                                    All</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. LIVE MARKET SECTION -->
+                <section id="market" class="section">
+                    <h2 class="welcome-text" style="margin-bottom: 20px;">Live Market Data</h2>
+
+                    <div class="filter-controls" style="display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap;">
+                        <button class="btn-pill active">Stocks</button>
+                        <button class="btn-pill">Indices</button>
+                        <button class="btn-pill">Sub-Indices</button>
+                        <select
+                            style="padding:8px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-input); color:var(--text-primary);">
+                            <option>All Sectors</option>
+                            <option>Banking</option>
+                            <option>Hydro Power</option>
+                        </select>
+                    </div>
+
+                    <div class="full-width-section">
+                        <table style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Company</th>
+                                    <th>Sector</th>
+                                    <th>LTP</th>
+                                    <th>Change</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="color: var(--color-blue); font-weight: 700;">ACLBSL</td>
+                                    <td>Aarambha Chautari Laghubitta</td>
+                                    <td>Microfinance</td>
+                                    <td>936.00</td>
+                                    <td class="text-up">+0.11%</td>
+                                    <td><button class="btn-primary"
+                                            style="padding: 6px 12px; font-size: 11px;">Buy</button></td>
+                                </tr>
+                                <tr>
+                                    <td style="color: var(--color-blue); font-weight: 700;">ADBL</td>
+                                    <td>Agricultural Development Bank</td>
+                                    <td>Commercial Banks</td>
+                                    <td>300.00</td>
+                                    <td class="text-up">+0.10%</td>
+                                    <td><button class="btn-primary"
+                                            style="padding: 6px 12px; font-size: 11px;">Buy</button></td>
+                                </tr>
+                                <tr>
+                                    <td style="color: var(--color-blue); font-weight: 700;">AHL</td>
+                                    <td>Asian Hydropower Limited</td>
+                                    <td>Hydro Power</td>
+                                    <td>551.00</td>
+                                    <td class="text-down">-2.29%</td>
+                                    <td><button class="btn-primary"
+                                            style="padding: 6px 12px; font-size: 11px;">Buy</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- TRADING CENTER (NEW) -->
+                <section id="trading" class="section">
+                    <h2 class="welcome-text" style="margin-bottom: 20px;">Trading Center</h2>
+
+                    <div class="lg-card" style="margin-bottom:24px; min-height:auto;">
+                        <div
+                            style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px;">
+                            <div>
+                                <h1
+                                    style="font-size:32px; font-weight:700; display:flex; align-items:center; gap:10px;">
+                                    MLBSL <i class="fa-regular fa-star"
+                                        style="font-size:20px; color:var(--text-secondary);"></i>
+                                </h1>
+                                <div style="color:var(--text-secondary); font-size:14px;">MAHILA LAGUBITTA BITTIYA
+                                    SANSTHA LIMITED</div>
+                                <div style="margin-top:8px; font-weight:600;">Volume: 2,262</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:36px; font-weight:700; color:var(--color-primary);">Rs. 1,930
+                                </div>
+                                <div class="text-down" style="font-size:16px; font-weight:600;">-15.00 (-0.77%)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-main">
+                        <div class="lg-card" style="min-height:auto;">
+                            <h3>Market Depth</h3>
+                            <table style="width:100%; margin-top:16px; font-size:13px;">
+                                <thead>
+                                    <tr style="border-bottom:2px solid var(--border-color);">
+                                        <th style="text-align:center;">Orders</th>
+                                        <th style="text-align:center;">Qty</th>
+                                        <th style="text-align:center;">Bid</th>
+                                        <th style="text-align:center;">Ask</th>
+                                        <th style="text-align:center;">Qty</th>
+                                        <th style="text-align:center;">Orders</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style="text-align:center;">2</td>
+                                        <td style="text-align:center;">90</td>
+                                        <td style="text-align:center;" class="text-up">1929.90</td>
+                                        <td style="text-align:center;" class="text-down">1930.10</td>
+                                        <td style="text-align:center;">445</td>
+                                        <td style="text-align:center;">4</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="text-align:center;">4</td>
+                                        <td style="text-align:center;">402</td>
+                                        <td style="text-align:center;" class="text-up">1929.80</td>
+                                        <td style="text-align:center;" class="text-down">1930.20</td>
+                                        <td style="text-align:center;">222</td>
+                                        <td style="text-align:center;">1</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="lg-card"
+                            style="min-height:auto; display:flex; flex-direction:column; justify-content:center;">
+                            <div style="display:flex; gap:16px; margin-bottom:24px;">
+                                <button class="btn-primary"
+                                    style="flex:1; background:rgba(16, 185, 129, 0.1); color:var(--color-success); border:1px solid var(--color-success);">BUY</button>
+                                <button class="btn-primary"
+                                    style="flex:1; background:rgba(239, 68, 68, 0.1); color:var(--color-danger); border:1px solid var(--color-danger);">SELL</button>
+                            </div>
+                            <div style="text-align:center; color:var(--text-secondary);">
+                                <i class="fa-regular fa-hand-pointer" style="font-size:24px; margin-bottom:12px;"></i>
+                                <p>Select Buy or Sell to start trading.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. PORTFOLIO SECTION -->
+                <section id="portfolio" class="section">
+                    <h2 class="welcome-text" style="margin-bottom: 20px;">My Portfolio</h2>
+                    <div class="stats-row">
+                        <div class="stat-card">
+                            <div class="stat-title">Total Investment</div>
+                            <div class="stat-value">Rs. 8,50,000</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">Current Value</div>
+                            <div class="stat-value">Rs. 8,95,200</div>
+                            <div class="stat-trend trend-up">+5.3%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">Day Gain</div>
+                            <div class="stat-value">Rs. 12,400</div>
+                            <div class="stat-trend trend-up">+1.2%</div>
+                        </div>
+                    </div>
+
+                    <div class="full-width-section">
+                        <h3>Holdings</h3>
+                        <table style="width: 100%; margin-top: 16px;">
+                            <thead>
+                                <tr>
+                                    <th>Stock</th>
+                                    <th>Units</th>
+                                    <th>WACC</th>
+                                    <th>LTP</th>
+                                    <th>Total Value</th>
+                                    <th>Mkt Gain/Loss</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="font-weight: 600;">NABIL</td>
+                                    <td>100</td>
+                                    <td>1,150</td>
+                                    <td>1,240</td>
+                                    <td>1,24,000</td>
+                                    <td class="text-up">+9,000</td>
+                                </tr>
+                                <tr>
+                                    <td style="font-weight: 600;">NICA</td>
+                                    <td>50</td>
+                                    <td>800</td>
+                                    <td>780</td>
+                                    <td>39,000</td>
+                                    <td class="text-down">-1,000</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 4. NEWS SECTION -->
+                <section id="news" class="section">
+                    <h2 class="welcome-text" style="margin-bottom: 20px;">Market News</h2>
+                    <div class="news-grid">
+                        <div class="news-card">
+                            <div class="news-img" style="background: #e2e8f0; position: relative;">
+                                <div class="news-tag">IPO</div>
+                            </div>
+                            <div class="news-content">
+                                <div class="news-meta">
+                                    <span>2 hrs ago</span>
+                                    <span>ShareSansar</span>
+                                </div>
+                                <div class="news-title">Reliance Spinning Mills to issue IPO via Book Building method.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="news-card">
+                            <div class="news-img" style="background: #e2e8f0; position: relative;">
+                                <div class="news-tag" style="background: var(--color-blue);">Microfinance</div>
+                            </div>
+                            <div class="news-content">
+                                <div class="news-meta">
+                                    <span>5 hrs ago</span>
+                                    <span>Bizmandu</span>
+                                </div>
+                                <div class="news-title">Microfinance sector sees huge rally as NRB reviews policy.</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 5. CALCULATORS SECTION -->
+                <section id="calculators" class="section">
+                    <h2 class="welcome-text" style="margin-bottom: 20px;">Financial Tools</h2>
+
+                    <div class="dashboard-main">
+                        <div class="lg-card" style="width:100%;">
+                            <div
+                                style="display:flex; border-bottom:1px solid var(--border-color); margin-bottom:24px; gap:24px;">
+                                <div
+                                    style="padding-bottom:12px; border-bottom:2px solid var(--color-blue); color:var(--color-blue); font-weight:600; cursor:pointer;">
+                                    Buy/Sell</div>
+                                <div style="padding-bottom:12px; cursor:pointer; color:var(--text-secondary);">Price
+                                    Adjustment</div>
+                                <div style="padding-bottom:12px; cursor:pointer; color:var(--text-secondary);">Dividend
+                                </div>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:32px;">
+                                <div>
+                                    <div
+                                        style="margin-bottom:24px; background:var(--bg-input); display:inline-flex; border-radius:8px; padding:4px;">
+                                        <button
+                                            style="padding:8px 24px; background:var(--bg-card); border-radius:6px; box-shadow:0 2px 5px rgba(0,0,0,0.1); color:var(--text-primary); font-weight:600;">Buy</button>
+                                        <button style="padding:8px 24px; color:var(--text-secondary);">Sell</button>
+                                    </div>
+
+                                    <div style="margin-bottom:16px;">
+                                        <label
+                                            style="display:block; margin-bottom:8px; font-size:12px; font-weight:600; color:var(--text-secondary);">QUANTITY</label>
+                                        <input type="number" class="search-input"
+                                            style="width:100%; border:1px solid var(--border-color);" placeholder="0">
+                                    </div>
+                                    <div style="margin-bottom:16px;">
+                                        <label
+                                            style="display:block; margin-bottom:8px; font-size:12px; font-weight:600; color:var(--text-secondary);">PRICE</label>
+                                        <input type="number" class="search-input"
+                                            style="width:100%; border:1px solid var(--border-color);" placeholder="0">
+                                    </div>
+                                </div>
+
+                                <div
+                                    style="background:var(--bg-input); border-radius:12px; display:flex; align-items:center; justify-content:center; color:var(--text-secondary); height:200px;">
+                                    <div style="text-align:center;">
+                                        <i class="fa-solid fa-calculator"
+                                            style="font-size:32px; margin-bottom:12px; opacity:0.5;"></i>
+                                        <div>Enter Quantity and Price</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 7. ALERTS SECTION (NEW) -->
+                <section id="alerts" class="section">
+                    <h2 class="welcome-text">Price Alerts</h2>
+
+                    <div class="dashboard-main">
+                        <div class="lg-card">
+                            <h3>Create New Alert</h3>
+                            <div style="margin-top:20px;">
+                                <label
+                                    style="display:block; margin-bottom:8px; font-size:12px; font-weight:600; color:var(--text-secondary);">STOCK</label>
+                                <input type="text" class="search-input"
+                                    style="width:100%; border:1px solid var(--border-color);"
+                                    placeholder="SEARCH E.G. NABIL">
+                            </div>
+
+                            <div style="margin-top:20px;">
+                                <label
+                                    style="display:block; margin-bottom:8px; font-size:12px; font-weight:600; color:var(--text-secondary);">TYPE</label>
+                                <div style="display:flex; gap:12px;">
+                                    <button
+                                        style="flex:1; padding:10px; border-radius:8px; background:rgba(67, 89, 190, 0.1); border:1px solid var(--color-blue); color:var(--color-blue); font-weight:600;">Above</button>
+                                    <button
+                                        style="flex:1; padding:10px; border-radius:8px; background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-secondary);">Below</button>
+                                </div>
+                            </div>
+
+                            <div style="margin-top:20px;">
+                                <label
+                                    style="display:block; margin-bottom:8px; font-size:12px; font-weight:600; color:var(--text-secondary);">TARGET
+                                    PRICE</label>
+                                <input type="number" class="search-input"
+                                    style="width:100%; border:1px solid var(--border-color);" value="1000">
+                            </div>
+
+                            <button class="btn-primary" style="width:100%; margin-top:24px;">Set Alert</button>
+                        </div>
+
+                        <div class="lg-card"
+                            style="display:flex; align-items:center; justify-content:center; background:rgba(67, 89, 190, 0.05); border:1px dashed var(--color-blue);">
+                            <div style="text-align:center; color:var(--text-secondary);">
+                                <i class="fa-regular fa-bell-slash" style="font-size:24px; margin-bottom:12px;"></i>
+                                <div>No alerts set</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 8. SETTINGS SECTION -->
+                <section id="settings" class="section">
+                    <h2 class="welcome-text" style="margin-bottom: 24px;">Settings</h2>
+
+                    <div style="max-width: 800px;">
+
+                        <!-- Profile Card -->
+                        <div class="lg-card" style="margin-bottom: 24px; min-height: auto;">
+                            <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+                                <div style="position: relative;">
+                                    <img src="https://ui-avatars.com/api/?name=Trader+One&background=4359BE&color=fff&size=128"
+                                        style="width: 80px; height: 80px; border-radius: 50%;">
+                                    <button
+                                        style="position: absolute; bottom: 0; right: 0; background: var(--color-navy); color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 12px; border: 2px solid white;">
+                                        <i class="fa-solid fa-camera"></i>
+                                    </button>
+                                </div>
+                                <div style="flex: 1;">
+                                    <h3 style="margin-bottom: 4px;">Trader One</h3>
+                                    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 12px;">
+                                        trader.one@example.com</p>
+                                    <button class="btn-primary" style="padding: 8px 16px; font-size: 13px;">Edit
+                                        Profile</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Preferences -->
+                        <div class="lg-card" style="margin-bottom: 24px; min-height: auto;">
+                            <h3
+                                style="margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--bg-input);">
+                                Appearance</h3>
+
+                            <div class="setting-item">
+                                <div>
+                                    <div style="font-weight: 600; margin-bottom: 2px;">Dark Mode</div>
+                                    <div style="font-size: 13px; color: var(--text-secondary);">Switch between light and
+                                        dark themes</div>
+                                </div>
+                                <label class="switch">
+                                    <input type="checkbox" id="themeToggle">
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Spacer for mobile scroll -->
+                <div style="height: 60px;"></div>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Inline script for mobile sidebar toggle
+        const menuBtn = document.querySelector('.mobile-menu-btn');
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.querySelector('.mobile-overlay');
+
+        if (menuBtn) {
+            menuBtn.addEventListener('click', () => {
+                sidebar.classList.add('open');
+                overlay.classList.add('active');
+            });
+        }
+
+        if (overlay) {
+            overlay.addEventListener('click', () => {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+            });
+        }
+
+        // Close sidebar on nav click (mobile UX)
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    sidebar.classList.remove('open');
+                    overlay.classList.remove('active');
+                }
+            });
+        });
+
+        // Desktop Sidebar Toggle
+        const desktopToggle = document.getElementById('desktopToggle');
+        if (desktopToggle) {
+            desktopToggle.addEventListener('click', () => {
+                sidebar.classList.toggle('collapsed');
+            });
+        }
+
+        // Set Date
+        const d = new Date();
+        document.getElementById('currentDate').textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    </script>
+</body>
+
+</html>
