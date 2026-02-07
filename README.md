@@ -49,6 +49,11 @@ docker compose down -v
 docker compose up --build
 ```
 
+## Restoring Data (Optional)
+
+If you have a `db_backup.json` file (shared by a friend), place it in the root folder.
+When you run `docker-compose up`, the system will **automatically import it** for you!
+
 ## Troubleshooting
 
 **Problem**: "Port 5432 is already in use"
