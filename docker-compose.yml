@@ -23,7 +23,7 @@ services:
     command: sh /app/entrypoint.sh
     volumes:
       - ./backend:/app
-      - ./sharehub_home_data.json:/sharehub_home_data.json:ro
+      - ./docs/sharehub_home_data.json:/sharehub_home_data.json:ro
       - ./db_backup.json:/app/db_backup.json:ro
     ports:
       - "8000:8000"

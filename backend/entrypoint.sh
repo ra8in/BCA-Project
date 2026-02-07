@@ -35,15 +35,9 @@ if not CustomUser.objects.filter(username='admin').exists():
     print("Superuser created: admin/admin123")
 END
 
-# Optional: Load database dump if exists
-if [ -f "db_backup.json" ]; then
-    echo "Loading database dump from db_backup.json..."
-    python manage.py loaddata db_backup.json || echo "Database load failed (maybe already loaded)"
-fi
-
-# Optional: Seed data if JSON file exists (only if dump didn't exist or we want fresh seed)
-if [ ! -f "db_backup.json" ] && [ -f "../sharehub_home_data.json" ]; then
-    echo "Seeding data from JSON..."
+# Seed data if JSON file exists
+if [ -f "../sharehub_home_data.json" ]; then
+    echo "Seeding data from sharehub_home_data.json..."
     python seed_full_data.py || echo "Seeding skipped or failed"
 fi
 
