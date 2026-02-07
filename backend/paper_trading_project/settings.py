@@ -36,16 +36,7 @@ SECRET_KEY = env('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
 
-# ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0','192.168.18.43']
-
-ALLOWED_HOSTS = [
-    'localhost',
-    '127.0.0.1',
-    '0.0.0.0',
-    '192.168.18.43',
-    '.ngrok-free.dev',
-    '.ngrok-free.app',
-]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "backend", "*"]
 
 
 CORS_ALLOWED_ORIGINS = [
