@@ -1,0 +1,21 @@
+
+# Force LF line endings for shell scripts (prevents CRLF issues on Windows)
+*.sh text eol=lf
+
+# Force LF for other common script files
+*.bash text eol=lf
+*.zsh text eol=lf
+
+# Docker files should also use LF
+Dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+
+# Python files
+*.py text eol=lf
+
+# Keep these as auto for normal text files
+*.md text
+*.txt text
+*.json text
+*.yaml text
+*.yml text
