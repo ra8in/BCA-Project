@@ -12,6 +12,8 @@ from .serializers import (
     OrderSerializer, WatchlistGroupSerializer, WatchlistItemSerializer
 )
 from stocks_app.models import Stock
+from stocks_app.tasks import trigger_market_data_update
+from stocks_app.market_hours import is_market_open
 from trading_app.models import Order, Transaction
 
 
@@ -118,6 +120,15 @@ class BuyStockView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Check if market is open for trading
+        market_open, reason = is_market_open()
+        if not market_open:
+            return Response({
+                'error': 'Market is closed',
+                'reason': reason,
+                'trading_hours': '11:00 AM - 3:00 PM (Sun-Thu)'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
             symbol = request.data.get('symbol')
             quantity = int(request.data.get('quantity', 0))
@@ -168,6 +179,9 @@ class BuyStockView(APIView):
                 
                 # 3. Handle Pending
                 if not should_execute:
+                    # Trigger price update even for pending orders!
+                    trigger_market_data_update()
+                    
                     return Response({
                         'message': f'Buy Limit Order placed for {quantity} {symbol} at Rs. {price_input}. Status: PENDING',
                         'order': {'id': order.id, 'status': 'PENDING'},
@@ -230,6 +244,9 @@ class BuyStockView(APIView):
                     realized_pl=None
                 )
             
+            # Trigger async update of ALL stock prices in database
+            trigger_market_data_update()
+            
             return Response({
                 'message': f'Successfully bought {quantity} shares of {symbol} at Rs. {execution_price}',
                 'holding': HoldingSerializer(holding).data,
@@ -247,6 +264,15 @@ class SellStockView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Check if market is open for trading
+        market_open, reason = is_market_open()
+        if not market_open:
+            return Response({
+                'error': 'Market is closed',
+                'reason': reason,
+                'trading_hours': '11:00 AM - 3:00 PM (Sun-Thu)'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
             symbol = request.data.get('symbol')
             quantity = int(request.data.get('quantity', 0))
@@ -306,6 +332,9 @@ class SellStockView(APIView):
             
             # 4. Handle Pending
             if not should_execute:
+                # Trigger price update even for pending orders!
+                trigger_market_data_update()
+                
                 return Response({
                     'message': f'Sell Limit Order placed for {quantity} {symbol} at Rs. {price_input}. Status: PENDING',
                     'order': {'id': order.id, 'status': 'PENDING'},
@@ -365,6 +394,9 @@ class SellStockView(APIView):
                 wacc_at_sell=wacc,
                 realized_pl=realized_pl
             )
+            
+            # Trigger async update of ALL stock prices in database
+            trigger_market_data_update()
          
             return Response({
             'message': f'Successfully sold {quantity} shares of {symbol} at Rs. {execution_price}. Net: Rs. {net_proceeds:,.2f}',
@@ -514,6 +546,11 @@ class CancelOrderView(APIView):
             
             order.status = 'CANCELLED'
             order.save()
+            
+            # Trigger update on cancellation too
+            from stocks_app.tasks import trigger_market_data_update
+            trigger_market_data_update()
+            
             return Response({'message': 'Order cancelled successfully'}, status=status.HTTP_200_OK)
         except Order.DoesNotExist:
             return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -667,12 +704,18 @@ class UpdateOrderView(APIView):
                         net_amount=final_net_amount,
                         realized_pl=realized_pl
                     )
+                    
+                    # Trigger async update of ALL stock prices in database
+                    trigger_market_data_update()
 
                     return Response({
                         'message': f'Order updated and EXECUTED for {quantity} {stock.symbol} at {execution_price}',
                         'new_balance': float(request.user.virtual_balance)
                     }, status=status.HTTP_200_OK)
 
+            # Trigger update even if not executed (order remains PENDING)
+            trigger_market_data_update()
+            
             return Response({'message': 'Order updated successfully'}, status=status.HTTP_200_OK)
 
         except Order.DoesNotExist:

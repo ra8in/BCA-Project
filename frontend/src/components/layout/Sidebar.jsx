@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import MarketStatusIndicator from '../common/MarketStatusIndicator';
 
 const Sidebar = () => {
     const location = useLocation();
@@ -101,7 +102,7 @@ const Sidebar = () => {
                         </Link>
                     </div>
                 )}
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-4">© 2026 Setu</p>
+                <MarketStatusIndicator />
             </div>
         </aside>
     );

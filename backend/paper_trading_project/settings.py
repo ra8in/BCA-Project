@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
+    'django_apscheduler',
     # Local apps
     'users_app',
     'stocks_app',

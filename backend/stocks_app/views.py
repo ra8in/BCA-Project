@@ -140,3 +140,11 @@ class TopTurnoverView(APIView):
         serializer = StockSerializer(stocks, many=True)
         return Response(serializer.data)
 
+
+class MarketStatusView(APIView):
+    """Return current market status (open/closed)"""
+    def get(self, request):
+        from .market_hours import get_market_status
+        return Response(get_market_status())
+
+
