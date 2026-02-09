@@ -35,11 +35,9 @@ if not CustomUser.objects.filter(username='admin').exists():
     print("Superuser created: admin/admin123")
 END
 
-# Seed data if JSON file exists
-if [ -f "../sharehub_home_data.json" ]; then
-    echo "Seeding data from sharehub_home_data.json..."
-    python seed_full_data.py || echo "Seeding skipped or failed"
-fi
+# Seed LIVE data from ShareHub API on startup
+echo "Checking if database needs seeding..."
+python seed_live_data.py || echo "⚠️  Live data seeding failed - continuing anyway"
 
 echo "Starting server..."
 exec python manage.py runserver 0.0.0.0:8000

@@ -18,19 +18,25 @@ You do **NOT** need to install Python, Node.js, or PostgreSQL manually.
    cd BCA_Project
    ```
 
-2. **Start the Application**:
+2. **Build & Start (First Time)**:
    ```bash
    docker-compose up --build
    ```
    *Note: The first run may take a few minutes to build images and seed the database.*
 
-3. **Access the App**:
+3. **Start Again (After Closing)**:
+   ```bash
+   docker-compose up
+   ```
+   *No need to rebuild every time! Just use `docker-compose up` for subsequent runs.*
+
+4. **Access the App**:
    - **Frontend**: http://localhost:5173
    - **Backend Admin**: http://localhost:8000/admin
      - **Username**: `admin`
      - **Password**: `admin123` (Created automatically if missing)
 
-4. **Stop the App**:
+5. **Stop the App**:
    Press `Ctrl+C` or run:
    ```bash
    docker-compose down
@@ -38,19 +44,17 @@ You do **NOT** need to install Python, Node.js, or PostgreSQL manually.
 
 ## 📊 Data Management
 
-### Automatic Seeding
-This project is configured to **automatically seed** the database with market data (Indices, Stocks, Sectors) when it starts with an empty database.
-- **Source File**: `docs/sharehub_home_data.json`
-- **Logic**: If the database is empty, the system reads this JSON file and populates the `Stock`, `StockPrice`, and `MarketIndex` tables.
+### Automatic Seeding (Live Data)
+This project **fetches live market data from ShareHub API** when starting with an empty database:
+- **Source**: ShareHub Nepal API (`sharehubnepal.com`)
+- **Logic**: On first startup, the system fetches real-time data and populates Stocks, Indices, Sectors, and price history.
+- **Smart Skip**: Subsequent restarts skip seeding to preserve your data.
 
-### How to Update Seed Data
-To share new market data with the team:
-1. Update `docs/sharehub_home_data.json` with the new JSON structure.
-2. Commit and push the file to GitHub.
-3. Teammates can receive the update by resetting their database:
+### How to Reset Database
+If you want fresh data from the API:
    ```bash
    docker-compose down -v  # WARNING: Deletes local users/portfolios!
-   docker-compose up --build
+   docker-compose up
    ```
 
 ### Local Data Persistence

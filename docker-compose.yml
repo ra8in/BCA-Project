@@ -23,7 +23,6 @@ services:
     command: bash /app/entrypoint.sh
     volumes:
       - ./backend:/app
-      - ./docs/sharehub_home_data.json:/sharehub_home_data.json:ro
     ports:
       - "8000:8000"
     environment:

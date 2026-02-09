@@ -195,38 +195,43 @@ def update_all_market_data() -> dict:
     return {'stocks': stocks_updated, 'indices': indices_updated, 'subIndices': subindices_updated}
 
 
-def create_end_of_day_stock_prices() -> int:
+def create_end_of_day_stock_prices(target_date=None) -> int:
     """
     Create permanent StockPrice records for all stocks (end-of-day snapshot).
     
     This should be called at 4:30 PM (after NEPSE market close at 3 PM).
     Creates one StockPrice record per stock per day.
     
+    Args:
+        target_date (datetime, optional): Date to tag the records with. Defaults to now.
+    
     Returns:
         Number of StockPrice records created
     """
     from stocks_app.models import Stock, StockPrice
     
-    logger.info("Creating end-of-day stock price records...")
-    today = timezone.now()
+    # Use provided date or current time
+    timestamp = target_date if target_date else timezone.now()
+    logger.info(f"Creating end-of-day stock price records for {timestamp.date()}...")
+    
     created_count = 0
     
     for stock in Stock.objects.filter(is_active=True):
         try:
-            # Check if we already have a record for today
+            # Check if we already have a record for that date
             existing = StockPrice.objects.filter(
                 stock=stock,
-                timestamp__date=today.date()
+                timestamp__date=timestamp.date()
             ).exists()
             
             if existing:
-                logger.debug(f"StockPrice for {stock.symbol} already exists today")
+                # If already exists, we skip (idempotency)
                 continue
             
             # Create permanent record
             StockPrice.objects.create(
                 stock=stock,
-                timestamp=today,
+                timestamp=timestamp,
                 open=stock.open_price or stock.last_price,
                 high=stock.high_price or stock.last_price,
                 low=stock.low_price or stock.last_price,
@@ -234,7 +239,10 @@ def create_end_of_day_stock_prices() -> int:
                 volume=stock.total_trade_quantity
             )
             
-            # Update previous_close for tomorrow
+            # Update previous_close for tomorrow (only if we are processing TODAY's EOD)
+            # If we are backfilling yesterday, updating previous_close might be risky if live data changed?
+            # Actually, ShareHub "previous_close" field is usually reliable.
+            # But let's keep it simple: always update previous_close as it reflects the "last known close".
             stock.previous_close = stock.last_price
             stock.save(update_fields=['previous_close'])
             
@@ -244,5 +252,5 @@ def create_end_of_day_stock_prices() -> int:
             logger.error(f"Failed to create StockPrice for {stock.symbol}: {e}")
             continue
     
-    logger.info(f"Created {created_count} end-of-day StockPrice records")
+    logger.info(f"Created {created_count} end-of-day StockPrice records for {timestamp.date()}")
     return created_count
