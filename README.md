@@ -32,7 +32,7 @@ You do **NOT** need to install Python, Node.js, or PostgreSQL manually.
 
 4. **Access the App**:
    - **Frontend**: http://localhost:5173
-   - **Backend Admin**: http://localhost:8000/admin
+   - **Backend Admin**: http://localhost:8000/admin/
      - **Username**: `admin`
      - **Password**: `admin123` (Created automatically if missing)
 

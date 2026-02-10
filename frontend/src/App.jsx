@@ -21,6 +21,7 @@ import MarketMovers from './pages/MarketMovers/MarketMovers';
 import StockDetail from './pages/StockDetail/StockDetail';
 import StockHistory from './pages/Portfolio/StockHistory';
 import PortfolioHistory from './pages/Portfolio/PortfolioHistory';
+import NotFound from './pages/NotFound/NotFound';
 
 function App() {
   return (
@@ -51,7 +52,7 @@ function App() {
                   <Layout><PortfolioHistory /></Layout>
                 </ProtectedRoute>
               } />
-              <Route path="/portfolio/:symbol/history" element={
+              <Route path="/portfolio/history/:symbol" element={
                 <ProtectedRoute>
                   <Layout><StockHistory /></Layout>
                 </ProtectedRoute>
@@ -66,6 +67,14 @@ function App() {
                   <Layout><Trading /></Layout>
                 </ProtectedRoute>
               } />
+              <Route path="/trading/:symbol" element={
+                <ProtectedRoute>
+                  <Layout><Trading /></Layout>
+                </ProtectedRoute>
+              } />
+
+              {/* 404 Catch All */}
+              <Route path="*" element={<Layout><NotFound /></Layout>} />
             </Routes>
           </UserProvider>
         </MarketProvider>

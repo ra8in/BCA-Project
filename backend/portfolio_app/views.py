@@ -146,6 +146,28 @@ class BuyStockView(APIView):
             current_price = stock.last_price
             if current_price is None:
                  return Response({'error': 'Stock market price is unavailable'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Limit Order Price Band Validation (±10% of Previous Close)
+            if order_type == 'LIMIT' and price_input:
+                try:
+                    limit_price = Decimal(price_input)
+                    # Use Previous Close as base price
+                    base_price = stock.previous_close
+                    if not base_price or base_price <= 0:
+                        base_price = stock.last_price # Fallback
+                    
+                    if base_price and base_price > 0:
+                        min_price = (base_price * Decimal('0.90')).quantize(Decimal('0.01'))
+                        max_price = (base_price * Decimal('1.10')).quantize(Decimal('0.01'))
+                        
+                        if limit_price < min_price or limit_price > max_price:
+                            return Response({
+                                'error': f'Limit price must be within ±10% of previous close (Rs. {base_price})',
+                                'range': f'Rs. {min_price} - Rs. {max_price}',
+                                'details': 'Circuit Breaker Rule'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                except Exception:
+                    pass
     
             # Start Atomic Transaction
             with transaction.atomic():
@@ -301,6 +323,28 @@ class SellStockView(APIView):
             current_price = stock.last_price
             if current_price is None:
                  return Response({'error': 'Stock market price is unavailable'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Limit Order Price Band Validation (±10% of Previous Close)
+            if order_type == 'LIMIT' and price_input:
+                try:
+                    limit_price = Decimal(price_input)
+                    # Use Previous Close as base price
+                    base_price = stock.previous_close
+                    if not base_price or base_price <= 0:
+                        base_price = stock.last_price # Fallback
+                    
+                    if base_price and base_price > 0:
+                        min_price = (base_price * Decimal('0.90')).quantize(Decimal('0.01'))
+                        max_price = (base_price * Decimal('1.10')).quantize(Decimal('0.01'))
+                        
+                        if limit_price < min_price or limit_price > max_price:
+                            return Response({
+                                'error': f'Limit price must be within ±10% of previous close (Rs. {base_price})',
+                                'range': f'Rs. {min_price} - Rs. {max_price}',
+                                'details': 'Circuit Breaker Rule'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                except Exception:
+                    pass
     
             # Start Atomic Transaction
             with transaction.atomic():

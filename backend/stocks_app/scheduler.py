@@ -215,7 +215,8 @@ def start_scheduler():
         name='End-of-Day Stock Price Update'
     )
     
-    logger.info("APScheduler started - EOD job scheduled for 4:30 PM Nepal time (Sun-Thu)")
+    logger.info("APScheduler started:")
+    logger.info("  - EOD update: 4:30 PM (Sun-Thu)")
     
     try:
         scheduler.start()

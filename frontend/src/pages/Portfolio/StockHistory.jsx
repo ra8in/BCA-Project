@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { MarketContext } from '../../context/MarketContext';
 import { portfolioService } from '../../services/portfolioService';
 import { stockService } from '../../services/stockService';
 
 const StockHistory = () => {
     const { symbol } = useParams();
     const navigate = useNavigate();
+    const { updateSector, updateStock } = useContext(MarketContext);
     const [history, setHistory] = useState(null);
     const [stock, setStock] = useState(null);
     const [nepseIndex, setNepseIndex] = useState(null);
@@ -47,6 +49,23 @@ const StockHistory = () => {
         fetchData();
     }, [symbol]);
 
+    // Update Global Ribbon
+    useEffect(() => {
+        if (stock) {
+            if (stock.sector_name) {
+                updateSector(stock.sector_name);
+            }
+            updateStock(stock);
+        } else {
+            updateSector(null);
+            updateStock(null);
+        }
+        return () => {
+            updateSector(null);
+            updateStock(null);
+        };
+    }, [stock, updateSector, updateStock]);
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -69,32 +88,9 @@ const StockHistory = () => {
         );
     }
 
-    const IndexItem = ({ label, data }) => {
-        if (!data) return null;
-        const isPositive = parseFloat(data.change_percent) >= 0;
-        return (
-            <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{label}</span>
-                <span className="font-bold text-gray-900 dark:text-white">{parseFloat(data.current_value).toLocaleString()}</span>
-                <span className={`text-sm font-medium ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-                    {isPositive ? '+' : ''}{parseFloat(data.change_percent).toFixed(2)}%
-                </span>
-            </div>
-        );
-    };
-
     return (
         <div>
-            {/* NEPSE and Sector Index Bar */}
-            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 mb-6 flex flex-wrap items-center gap-x-8 gap-y-2 border border-blue-100 dark:border-gray-700/50">
-                <IndexItem label="NEPSE" data={nepseIndex} />
-                {sectorIndex && (
-                    <>
-                        <div className="hidden md:block w-px h-6 bg-gray-200 dark:bg-gray-700"></div>
-                        <IndexItem label={stock?.sector_name || 'Sector'} data={sectorIndex} />
-                    </>
-                )}
-            </div>
+            {/* Local Index Bar Removed - Using Global Ribbon */}
 
             {/* Header with Sector Badge */}
             <div className="flex items-center gap-4 mb-6">
@@ -223,7 +219,7 @@ const StockHistory = () => {
                     </table>
                 )}
             </div>
-        </div>
+        </div >
     );
 };
 

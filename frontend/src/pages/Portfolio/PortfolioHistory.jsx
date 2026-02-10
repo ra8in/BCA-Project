@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { portfolioService } from '../../services/portfolioService';
 import { stockService } from '../../services/stockService';
-import MarketTicker from '../../components/common/MarketTicker';
+
 
 const PortfolioHistory = () => {
     const navigate = useNavigate();
@@ -138,7 +138,7 @@ const PortfolioHistory = () => {
 
     return (
         <div>
-            <MarketTicker />
+
 
             {/* Header */}
             <div className="flex items-center gap-4 mb-6">
@@ -239,7 +239,7 @@ const PortfolioHistory = () => {
                                         </td>
                                         <td className="px-6 py-4">
                                             <button
-                                                onClick={() => navigate(`/portfolio/${stock.symbol}/history`)}
+                                                onClick={() => navigate(`/portfolio/history/${stock.symbol}`)}
                                                 className="px-3 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors"
                                             >
                                                 Details

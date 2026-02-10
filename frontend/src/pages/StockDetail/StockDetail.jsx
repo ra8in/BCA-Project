@@ -1,40 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
+import { MarketContext } from '../../context/MarketContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { stockService } from '../../services/stockService';
 import { portfolioService } from '../../services/portfolioService';
-import MarketTicker from '../../components/common/MarketTicker';
 import { useAuth } from '../../context/AuthContext';
 
 const StockDetail = () => {
     const { symbol } = useParams();
     const navigate = useNavigate();
     const { isAuthenticated } = useAuth();
+    const { updateSector, updateStock } = useContext(MarketContext);
 
     const [stock, setStock] = useState(null);
-    const [nepseIndex, setNepseIndex] = useState(null);
-    const [sectorIndex, setSectorIndex] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    // Fetch Stock Data
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
             setError(null);
             try {
-                // Fetch stock detail
                 const stockData = await stockService.getDetail(symbol);
                 setStock(stockData);
-
-                // Fetch market indices to get NEPSE
-                const indices = await stockService.getMarketIndices();
-                const nepse = indices.find(i => i.symbol === 'NEPSE' || i.name.toLowerCase().includes('nepse'));
-                setNepseIndex(nepse || null);
-
-                // Fetch sub-indices to get sector's index
-                const subIndices = await stockService.getSubIndices();
-                const sectorIdx = subIndices.find(s => s.sector_name === stockData.sector_name);
-                setSectorIndex(sectorIdx || null);
-
             } catch (err) {
                 setError('Stock not found');
             } finally {
@@ -43,6 +31,20 @@ const StockDetail = () => {
         };
         fetchData();
     }, [symbol]);
+
+    // Update Global Sector & Stock Context
+    useEffect(() => {
+        if (stock) {
+            if (stock.sector_name) {
+                updateSector(stock.sector_name);
+            }
+            updateStock(stock);
+        }
+        return () => {
+            updateSector(null);
+            updateStock(null);
+        };
+    }, [stock, updateSector, updateStock]);
 
     if (loading) {
         return (
@@ -67,25 +69,6 @@ const StockDetail = () => {
 
     const isPositive = parseFloat(stock.change_percent) >= 0;
 
-    // Ticker Item Component
-    const TickerItem = ({ label, data }) => {
-        if (!data) return null;
-        const isUp = parseFloat(data.change) >= 0;
-        return (
-            <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{label}</span>
-                <div className="flex items-baseline gap-2">
-                    <span className="font-black text-gray-900 dark:text-white">
-                        {parseFloat(data.current_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </span>
-                    <span className={`text-xs font-bold ${isUp ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {isUp ? '+' : ''}{parseFloat(data.change).toFixed(2)} <span className="opacity-75">({parseFloat(data.change_percent).toFixed(2)}%)</span>
-                    </span>
-                </div>
-            </div>
-        );
-    };
-
     // Stat Card Component
     const StatCard = ({ label, value, subLabel }) => (
         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
@@ -95,15 +78,14 @@ const StockDetail = () => {
         </div>
     );
 
+
+
+
+
     return (
         <div className="p-4 md:p-8 max-w-5xl mx-auto">
 
-            {/* Market Ticker Header */}
-            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 mb-8 flex flex-wrap items-center gap-x-8 gap-y-2 border border-blue-100 dark:border-gray-700/50">
-                <TickerItem label="NEPSE" data={nepseIndex} />
-                <div className="hidden md:block w-px h-6 bg-gray-200 dark:bg-gray-700"></div>
-                <TickerItem label={stock.sector_name || 'Sector'} data={sectorIndex} />
-            </div>
+
 
             {/* Header */}
             <div className="mb-8">
@@ -137,11 +119,21 @@ const StockDetail = () => {
             </div>
 
             {/* Key Statistics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
                 <StatCard label="Open" value={`Rs. ${parseFloat(stock.open_price || 0).toLocaleString()}`} />
                 <StatCard label="High" value={`Rs. ${parseFloat(stock.high_price || 0).toLocaleString()}`} />
                 <StatCard label="Low" value={`Rs. ${parseFloat(stock.low_price || 0).toLocaleString()}`} />
                 <StatCard label="Prev. Close" value={`Rs. ${parseFloat(stock.previous_close || 0).toLocaleString()}`} />
+                <StatCard
+                    label="Upper Circuit (+10%)"
+                    value={`Rs. ${parseFloat(stock.circuit_high || 0).toFixed(1)}`}
+                    subLabel="Max Price"
+                />
+                <StatCard
+                    label="Lower Circuit (-10%)"
+                    value={`Rs. ${parseFloat(stock.circuit_low || 0).toFixed(1)}`}
+                    subLabel="Min Price"
+                />
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
@@ -201,6 +193,7 @@ const StockDetail = () => {
 
 // Sub-component for Transaction History
 const TransactionHistory = ({ symbol }) => {
+    const navigate = useNavigate();
     const [history, setHistory] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -223,7 +216,18 @@ const TransactionHistory = ({ symbol }) => {
 
     return (
         <div className="mt-12">
-            <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Your History with {symbol}</h2>
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Your Position</h2>
+                <button
+                    onClick={() => navigate(`/portfolio/history/${symbol}`)}
+                    className="text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-1"
+                >
+                    View Full History
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
+                </button>
+            </div>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -247,41 +251,6 @@ const TransactionHistory = ({ symbol }) => {
                 </div>
             </div>
 
-            {/* Transactions Table */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-gray-50 dark:bg-gray-900/50">
-                        <tr>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Date</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Type</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Quantity</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Price</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Total</th>
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">P/L</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {history.transactions.map((tx) => (
-                            <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
-                                    {new Date(tx.date).toLocaleDateString()}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold ${tx.type === 'BUY' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                        {tx.type}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-sm font-medium dark:text-white">{tx.quantity}</td>
-                                <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">Rs. {parseFloat(tx.price).toLocaleString()}</td>
-                                <td className="px-6 py-4 text-sm font-medium dark:text-white">Rs. {parseFloat(tx.total).toLocaleString()}</td>
-                                <td className={`px-6 py-4 text-sm font-bold ${tx.realized_pl > 0 ? 'text-green-500' : tx.realized_pl < 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                                    {tx.realized_pl ? `Rs. ${parseFloat(tx.realized_pl).toLocaleString()}` : '-'}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
         </div>
     );
 };

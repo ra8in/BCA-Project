@@ -1,15 +1,33 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const NotFound = () => {
+    const navigate = useNavigate();
+
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 text-center px-4">
-            <h1 className="text-9xl font-black text-blue-100 dark:text-blue-900">404</h1>
-            <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Page Not Found</h2>
-            <p className="text-gray-500 max-w-md mb-8">The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.</p>
-            <Link to="/" className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-transform hover:scale-105 shadow-lg shadow-blue-500/30">
-                Go to Dashboard
-            </Link>
+        <div className="flex flex-col items-center justify-center min-h-[500px] text-center p-8 animate-in fade-in duration-500">
+            <h1 className="text-9xl font-black text-gray-200 dark:text-gray-700 select-none">404</h1>
+            <div className="-mt-12 backdrop-blur-sm">
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mt-4">Page Not Found</h2>
+                <p className="text-gray-500 dark:text-gray-400 mt-2 mb-8 max-w-md mx-auto">
+                    The page you are looking for doesn't exist or has been moved.
+                </p>
+
+                <div className="flex gap-4 justify-center">
+                    <button
+                        onClick={() => navigate('/')}
+                        className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30"
+                    >
+                        Go Home
+                    </button>
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="px-6 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        Go Back
+                    </button>
+                </div>
+            </div>
         </div>
     );
 };

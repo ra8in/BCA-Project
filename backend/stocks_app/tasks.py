@@ -40,10 +40,16 @@ def trigger_market_data_update():
     """
     try:
         from stocks_app.services import update_all_market_data
+        from portfolio_app.services import execute_pending_orders
         
         logger.info("Market data update triggered...")
         result = update_all_market_data()
         logger.info(f"Market data update completed: {result['stocks']} stocks, {result['indices']} indices, {result['subIndices']} sub-indices")
+        
+        # Check pending orders after price update
+        order_result = execute_pending_orders()
+        if order_result['executed'] > 0:
+            logger.info(f"Async pending order check: {order_result['executed']} orders executed")
         
     except Exception as e:
         logger.error(f"Market data update failed: {e}")

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useContext } from 'react';
+import { MarketContext } from '../../context/MarketContext';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { calculatorService } from '../../services/calculatorService';
 import { portfolioService } from '../../services/portfolioService';
 import { stockService } from '../../services/stockService';
@@ -18,6 +19,9 @@ const useDebounce = (value, delay) => {
 
 const Trading = () => {
     const location = useLocation();
+    const { symbol: routeSymbol } = useParams();
+    const navigate = useNavigate();
+
 
     // State
     const [mode, setMode] = useState(null); // 'buy', 'sell', or null (view only)
@@ -28,7 +32,9 @@ const Trading = () => {
         type: 'market', // 'market' or 'limit'
     });
     const [selectedStockData, setSelectedStockData] = useState(null);
+
     const [holdings, setHoldings] = useState([]);
+    const { updateSector, updateStock } = useContext(MarketContext);
 
     // Order History State
     const [activeOrders, setActiveOrders] = useState([]);
@@ -100,6 +106,23 @@ const Trading = () => {
         }
     };
 
+    // Update Global Sector & Stock Context
+    useEffect(() => {
+        if (selectedStockData) {
+            if (selectedStockData.sector_name) {
+                updateSector(selectedStockData.sector_name);
+            }
+            updateStock(selectedStockData);
+        } else {
+            updateSector(null);
+            updateStock(null);
+        }
+        return () => {
+            updateSector(null);
+            updateStock(null);
+        };
+    }, [selectedStockData, updateSector, updateStock]);
+
     // Get available quantity for current symbol
     const availableQty = React.useMemo(() => {
         if (!order.symbol) return 0;
@@ -116,6 +139,31 @@ const Trading = () => {
     const [showConfirm, setShowConfirm] = useState(false);
 
     const [editingOrder, setEditingOrder] = useState(null);
+    const [isMarketOpen, setIsMarketOpen] = useState(false);
+
+    // Market Status Check
+    useEffect(() => {
+        const checkMarketStatus = () => {
+            const now = new Date();
+            // Convert to Kathmandu time
+            const nptStr = now.toLocaleString("en-US", { timeZone: "Asia/Kathmandu" });
+            const npt = new Date(nptStr);
+
+            const day = npt.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+            const hour = npt.getHours();
+
+            // Sunday(0) to Thursday(4)
+            const isWeekday = day >= 0 && day <= 4;
+            // 11:00 to 15:00 (3 PM)
+            const isTime = hour >= 11 && hour < 15;
+
+            setIsMarketOpen(isWeekday && isTime);
+        };
+
+        checkMarketStatus();
+        const timer = setInterval(checkMarketStatus, 60000); // Check every minute
+        return () => clearInterval(timer);
+    }, []);
 
     // Toast notification
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
@@ -128,37 +176,32 @@ const Trading = () => {
     // Initial Load - Check for navigation state OR random stock
     useEffect(() => {
         const init = async () => {
-            if (location.state) {
-                const { mode: incomingMode, symbol: incomingSymbol } = location.state;
-                if (incomingMode) setMode(incomingMode);
-                if (incomingSymbol) {
-                    setOrder(prev => ({ ...prev, symbol: incomingSymbol }));
-                }
-                // If symbol is passed, detailed data might need to be fetched separately via stockService.getDetail(incomingSymbol)
-                // For now, simpler to just let the search input or user interaction fill it, OR fetch it here.
-                if (incomingSymbol) {
-                    try {
-                        const stockDetails = await stockService.getDetail(incomingSymbol);
-                        setSelectedStockData(stockDetails);
-                        setOrder(prev => ({ ...prev, price: stockDetails.last_price }));
-                    } catch (err) {
-                        // Fallback or silent fail
-                        console.log("Could not fetch incoming stock details", err);
+            if (routeSymbol) {
+                // 1. URL Param Selection (Highest Priority)
+                try {
+                    const stockDetails = await stockService.getDetail(routeSymbol);
+                    setSelectedStockData(stockDetails);
+                    setOrder(prev => ({ ...prev, symbol: stockDetails.symbol, price: stockDetails.last_price }));
+
+                    // Also handle incoming state if mode is passed (e.g. from Buy button elsewhere)
+                    if (location.state?.mode) {
+                        setMode(location.state.mode);
+                        // Clear state to avoid re-triggering? optional
                     }
+                } catch (err) {
+                    console.log("Could not fetch stock details from URL", err);
+                    showToast("Stock not found", "error");
                 }
             } else {
-                // Random stock logic when no state (e.g. direct nav)
+                // 2. Root Route (/trading) -> Redirect to Random Stock
                 try {
-                    // Fetch ALL stocks for true random selection from entire market
                     const response = await stockService.getAllStocks();
-                    // Handle both raw list and paginated response
                     const allStocks = Array.isArray(response) ? response : (response.results || []);
 
                     if (allStocks && allStocks.length > 0) {
                         const randomStock = allStocks[Math.floor(Math.random() * allStocks.length)];
-                        setSelectedStockData(randomStock);
-                        setOrder(prev => ({ ...prev, symbol: randomStock.symbol, price: randomStock.last_price }));
-                        // Do NOT set mode, so it stays in "view only"
+                        // Redirect to the distinct URL
+                        navigate(`/trading/${randomStock.symbol}`, { replace: true });
                     }
                 } catch (e) {
                     console.log("Failed to load random stock", e);
@@ -166,9 +209,7 @@ const Trading = () => {
             }
         };
         init();
-
-        if (location.state) window.history.replaceState({}, document.title);
-    }, [location]);
+    }, [routeSymbol, navigate, location.state]);
 
 
 
@@ -222,12 +263,7 @@ const Trading = () => {
     }, [debouncedQty, debouncedPrice, mode]);
 
     const selectStock = (stock) => {
-        setSelectedStockData(stock);
-        setOrder(prev => ({
-            ...prev,
-            symbol: stock.symbol,
-            price: prev.type === 'market' ? stock.last_price : prev.price
-        }));
+        navigate(`/trading/${stock.symbol}`);
     };
 
     // Use real stock price for LTP, fallback to order price only if no stock data (shouldn't happen)
@@ -383,6 +419,8 @@ const Trading = () => {
         }
     };
 
+
+
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 relative">
             {/* Toast Notification */}
@@ -392,6 +430,8 @@ const Trading = () => {
                     {toast.message}
                 </div>
             )}
+
+
             <h2 className="text-3xl font-black mb-8 text-gray-800 dark:text-gray-100 tracking-tight">Trading Center</h2>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -425,15 +465,38 @@ const Trading = () => {
                                     {order.symbol && selectedStockData ? (selectedStockData.total_trade_quantity?.toLocaleString() || '0') : '---'}
                                 </p>
                             </div>
+                            <div className="text-right">
+                                <div className="flex items-center gap-4">
+                                    <div>
+                                        <span className="text-xs text-gray-400 font-bold uppercase mr-2">Lower:</span>
+                                        <span className="text-lg font-black text-gray-800 dark:text-white">
+                                            {order.symbol && selectedStockData ? selectedStockData.circuit_low : '---'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-gray-400 font-bold uppercase mr-2">Upper:</span>
+                                        <span className="text-lg font-black text-gray-800 dark:text-white">
+                                            {order.symbol && selectedStockData ? selectedStockData.circuit_high : '---'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     {/* Market Depth Table */}
                     <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center">
                             <h3 className="font-bold text-gray-700 dark:text-gray-300">Market Depth</h3>
+                            {!isMarketOpen && (
+                                <span className="text-xs font-bold text-red-500 bg-red-100 dark:bg-red-900/30 px-2 py-1 rounded">CLOSED</span>
+                            )}
                         </div>
-                        {order.symbol ? (
+                        {!isMarketOpen ? (
+                            <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm font-bold">
+                                Market Closed, Depth unavailable
+                            </div>
+                        ) : order.symbol ? (
                             <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700">
                                 {/* BUY SIDE */}
                                 <div>

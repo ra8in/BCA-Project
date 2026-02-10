@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { portfolioService } from '../../services/portfolioService';
-import MarketTicker from '../../components/common/MarketTicker';
+
 
 const Portfolio = () => {
     const navigate = useNavigate();
@@ -74,7 +74,7 @@ const Portfolio = () => {
 
     return (
         <div>
-            <MarketTicker />
+
             <h2 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">My Portfolio</h2>
 
             {/* Portfolio Summary */}
@@ -188,7 +188,7 @@ const Portfolio = () => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); navigate(`/portfolio/${holding.stock_symbol}/history`); }}
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/portfolio/history/${holding.stock_symbol}`); }}
                                                     className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900 dark:text-blue-300 dark:hover:bg-blue-800 text-sm font-medium rounded-lg transition-colors"
                                                 >
                                                     Details

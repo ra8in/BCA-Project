@@ -31,7 +31,29 @@ class MarketIndexSerializer(serializers.ModelSerializer):
 class StockSerializer(serializers.ModelSerializer):
     sector_name = serializers.CharField(source='sector.name', read_only=True)
     sector_id = serializers.IntegerField(source='sector.id', read_only=True)
+    circuit_high = serializers.SerializerMethodField()
+    circuit_low = serializers.SerializerMethodField()
 
     class Meta:
         model = Stock
-        fields = ['id', 'symbol', 'name', 'sector_id', 'sector_name', 'last_price', 'change', 'change_percent', 'open_price', 'high_price', 'low_price', 'market_cap', 'total_trade_quantity', 'total_trades', 'total_traded_value', 'previous_close']
+        fields = ['id', 'symbol', 'name', 'sector_id', 'sector_name', 'last_price', 'change', 'change_percent', 'open_price', 'high_price', 'low_price', 'market_cap', 'total_trade_quantity', 'total_trades', 'total_traded_value', 'previous_close', 'circuit_high', 'circuit_low']
+
+    def get_circuit_high(self, obj):
+        from decimal import Decimal
+        # Base price: Previous Close (or Last Price if missing)
+        base = obj.previous_close if obj.previous_close and obj.previous_close > 0 else obj.last_price
+        if base:
+            # +10%, format to 1 decimal place (x.y)
+            limit = base * Decimal('1.10')
+            return float(format(limit, '.1f'))
+        return None
+
+    def get_circuit_low(self, obj):
+        from decimal import Decimal
+        # Base price: Previous Close (or Last Price if missing)
+        base = obj.previous_close if obj.previous_close and obj.previous_close > 0 else obj.last_price
+        if base:
+            # -10%, format to 1 decimal place (x.y)
+            limit = base * Decimal('0.90')
+            return float(format(limit, '.1f'))
+        return None

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { stockService } from '../../services/stockService';
-import MarketTicker from '../../components/common/MarketTicker';
+
 
 const MarketMovers = () => {
     const { tab } = useParams();
@@ -66,7 +66,7 @@ const MarketMovers = () => {
 
     return (
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
-            <MarketTicker />
+
 
             {/* Header & Tabs */}
             <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">

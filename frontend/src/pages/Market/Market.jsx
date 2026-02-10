@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { stockService } from '../../services/stockService';
 import StockSearchInput from '../../components/common/StockSearchInput';
 import WatchlistMarker from '../../components/common/WatchlistMarker';
-import MarketTicker from '../../components/common/MarketTicker';
+import { MarketContext } from '../../context/MarketContext';
+
 
 const Market = () => {
     const [stocks, setStocks] = useState([]);
@@ -13,6 +14,7 @@ const Market = () => {
     const [selectedSector, setSelectedSector] = useState(null);
     const [viewMode, setViewMode] = useState('stocks'); // 'stocks', 'sectors', 'indices'
     const navigate = useNavigate();
+    const { updateSector } = useContext(MarketContext);
 
     // Fetch sectors and indices on mount
     useEffect(() => {
@@ -37,6 +39,18 @@ const Market = () => {
         };
         fetchStocks();
     }, [selectedSector]);
+    // Sync selected sector with Global Ribbon
+    useEffect(() => {
+        if (selectedSector) {
+            const sector = sectors.find(s => s.id === parseInt(selectedSector));
+            if (sector) {
+                updateSector(sector.name);
+            }
+        } else {
+            updateSector(null);
+        }
+        return () => updateSector(null);
+    }, [selectedSector, sectors, updateSector]);
 
     const handleStockClick = (symbol) => {
         navigate(`/stock/${symbol}`);
@@ -51,8 +65,7 @@ const Market = () => {
 
     return (
         <div>
-            {/* Market Ticker - filters to selected sector */}
-            <MarketTicker selectedSectorId={selectedSector} />
+
 
             <h2 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">Market</h2>
 
