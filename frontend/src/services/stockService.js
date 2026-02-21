@@ -24,6 +24,34 @@ export const stockService = {
         }
     },
 
+    getLiveStockPrice: async (symbol) => {
+        try {
+            const response = await axios.get(`${API_URL}/live-price/${symbol}/`);
+            return response.data;
+        } catch (error) {
+            // If throttled (429), the backend MIGHT still send data. 
+            // Axios throws on 429, so we need to check if response.data exists.
+            if (error.response && error.response.status === 429 && error.response.data) {
+                return { ...error.response.data, _throttled: true };
+            }
+            console.error("Live Stock Price Error:", error);
+            throw error;
+        }
+    },
+
+    getMarketDepth: async (symbol) => {
+        try {
+            const response = await axios.get(`${API_URL}/market-depth/${symbol}/`);
+            return response.data;
+        } catch (error) {
+            if (error.response && error.response.status === 429 && error.response.data) {
+                return { ...error.response.data, _throttled: true };
+            }
+            console.error("Market Depth Error:", error);
+            throw error;
+        }
+    },
+
     getAllStocks: async (sectorId = null) => {
         try {
             const url = sectorId ? `${API_URL}/?sector=${sectorId}` : `${API_URL}/`;
@@ -32,6 +60,16 @@ export const stockService = {
         } catch (error) {
             console.error("Get All Stocks Error:", error);
             return [];
+        }
+    },
+
+    getMarketStatus: async () => {
+        try {
+            const response = await axios.get(`${API_URL}/market-status/`);
+            return response.data;
+        } catch (error) {
+            console.error("Get Market Status Error:", error);
+            return { is_open: false, message: 'Unavailable' };
         }
     },
 

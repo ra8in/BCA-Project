@@ -59,17 +59,17 @@ class SectorListView(APIView):
 class SubIndexListView(APIView):
     """List all sectoral sub-indices"""
     def get(self, request):
-        subindices = SubIndex.objects.select_related('sector').order_by('name')
-        serializer = SubIndexSerializer(subindices, many=True)
-        return Response(serializer.data)
+        from stocks_app.services import get_cached_sub_indices
+        data = get_cached_sub_indices()
+        return Response(data)
 
 
 class MarketIndexListView(APIView):
     """List main market indices (NEPSE, Sensitive, Float, etc.)"""
     def get(self, request):
-        indices = MarketIndex.objects.all().order_by('name')
-        serializer = MarketIndexSerializer(indices, many=True)
-        return Response(serializer.data)
+        from stocks_app.services import get_cached_market_indices
+        data = get_cached_market_indices()
+        return Response(data)
 
 
 from rest_framework.pagination import PageNumberPagination
@@ -148,3 +148,114 @@ class MarketStatusView(APIView):
         return Response(get_market_status())
 
 
+class MarketDepthView(APIView):
+    """
+    GET /api/stocks/market-depth/<symbol>/
+    
+    Returns live market depth (top 5 buy/sell orders) with:
+    - 60-second cache
+    - 2-second per-client throttling
+    """
+    def get(self, request, symbol):
+        from .services import get_cached_market_depth
+        
+        # Get client identifier (user ID if authenticated, else IP)
+        if request.user.is_authenticated:
+            client_id = f"user_{request.user.id}"
+        else:
+            # Get IP from X-Forwarded-For or REMOTE_ADDR
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                client_id = f"ip_{x_forwarded_for.split(',')[0].strip()}"
+            else:
+                client_id = f"ip_{request.META.get('REMOTE_ADDR', 'unknown')}"
+        
+        depth = get_cached_market_depth(symbol.upper(), client_id)
+        
+        # Check if throttled
+        if depth.get('throttled'):
+            return Response(
+                depth,
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+        
+        # Check if error
+        if 'error' in depth and not depth.get('marketDepth'):
+            return Response(
+                depth,
+                status=status.HTTP_404_NOT_FOUND if 'not found' in depth.get('error', '').lower() else status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        return Response(depth)
+
+
+class LiveStockPriceView(APIView):
+    """
+    GET /api/stocks/live-price/<symbol>/
+    
+    Returns current stock price with:
+    - 60-second cache
+    - 2-second per-client throttling
+    """
+    def get(self, request, symbol):
+        from .services import get_cached_stock_price
+        
+        # Get client identifier
+        if request.user.is_authenticated:
+            client_id = f"user_{request.user.id}"
+        else:
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                client_id = f"ip_{x_forwarded_for.split(',')[0].strip()}"
+            else:
+                client_id = f"ip_{request.META.get('REMOTE_ADDR', 'unknown')}"
+        
+        price_data = get_cached_stock_price(symbol.upper(), client_id)
+        
+        # Check if throttled
+        if price_data.get('throttled'):
+            return Response(
+                price_data,
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+        
+        # Check if error
+        if 'error' in price_data and 'symbol' not in price_data:
+            return Response(
+                price_data,
+                status=status.HTTP_404_NOT_FOUND if 'not found' in price_data.get('error', '').lower() else status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        return Response(price_data)
+
+
+class StockHistoryView(APIView):
+    """
+    GET /api/stocks/history/<symbol>/
+    
+    Returns historical OHLCV data.
+    Optional params:
+    - from: YYYY-MM-DD (default: 30 days ago)
+    - to: YYYY-MM-DD (default: today)
+    """
+    def get(self, request, symbol):
+        from .models import StockPrice
+        from .serializers import StockHistorySerializer
+        from datetime import datetime, timedelta
+        
+        try:
+            stock = Stock.objects.get(symbol__iexact=symbol)
+        except Stock.DoesNotExist:
+            return Response({"error": "Stock not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        # Date filtering
+        to_date = request.query_params.get('to', datetime.now().date().isoformat())
+        from_date = request.query_params.get('from', (datetime.now() - timedelta(days=30)).date().isoformat())
+        
+        prices = StockPrice.objects.filter(
+            stock=stock,
+            timestamp__date__range=[from_date, to_date]
+        ).order_by('timestamp')
+        
+        serializer = StockHistorySerializer(prices, many=True)
+        return Response(serializer.data)

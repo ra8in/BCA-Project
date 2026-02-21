@@ -13,10 +13,24 @@ const Market = () => {
     const [loading, setLoading] = useState(true);
     const [selectedSector, setSelectedSector] = useState(null);
     const [viewMode, setViewMode] = useState('stocks'); // 'stocks', 'sectors', 'indices'
+    const [isMarketOpen, setIsMarketOpen] = useState(false);
     const navigate = useNavigate();
     const { updateSector } = useContext(MarketContext);
 
-    // Fetch sectors and indices on mount
+    // Fetch market status on mount
+    useEffect(() => {
+        const fetchMarketStatus = async () => {
+            try {
+                const status = await stockService.getMarketStatus();
+                setIsMarketOpen(status?.is_open || false);
+            } catch (err) {
+                console.error("Failed to fetch market status", err);
+            }
+        };
+        fetchMarketStatus();
+    }, []);
+
+    // Fetch sectors and indices on mount + auto-refresh aligned to the clock
     useEffect(() => {
         const fetchData = async () => {
             const [sectorsData, indicesData] = await Promise.all([
@@ -27,9 +41,32 @@ const Market = () => {
             setIndices(indicesData);
         };
         fetchData();
-    }, []);
 
-    // Fetch stocks when sector filter changes
+        // Auto-refresh indices/sectors aligned to the minute (at :01 seconds) during market hours
+        let timeoutId;
+
+        const scheduleNextFetch = () => {
+            if (!isMarketOpen) return;
+
+            const now = new Date();
+            // Wait until next minute exactly (HH:MM:00)
+            // If we are currently at 14:00:00.005, this waits ~59995ms
+            const msUntilNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+
+            timeoutId = setTimeout(() => {
+                fetchData();
+                scheduleNextFetch(); // Schedule the next one recursively
+            }, msUntilNextMinute);
+        };
+
+        if (isMarketOpen) {
+            scheduleNextFetch();
+        }
+
+        return () => { if (timeoutId) clearTimeout(timeoutId); };
+    }, [isMarketOpen]);
+
+    // Fetch stocks when sector filter changes + auto-refresh aligned to the clock
     useEffect(() => {
         const fetchStocks = async () => {
             setLoading(true);
@@ -38,7 +75,29 @@ const Market = () => {
             setLoading(false);
         };
         fetchStocks();
-    }, [selectedSector]);
+
+        // Auto-refresh stocks aligned to the minute (at :01 seconds) during market hours
+        let timeoutId;
+
+        const scheduleNextFetch = () => {
+            if (!isMarketOpen) return;
+
+            const now = new Date();
+            // Wait until next minute exactly (HH:MM:00)
+            const msUntilNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+
+            timeoutId = setTimeout(() => {
+                fetchStocks();
+                scheduleNextFetch();
+            }, msUntilNextMinute);
+        };
+
+        if (isMarketOpen) {
+            scheduleNextFetch();
+        }
+
+        return () => { if (timeoutId) clearTimeout(timeoutId); };
+    }, [selectedSector, isMarketOpen]);
     // Sync selected sector with Global Ribbon
     useEffect(() => {
         if (selectedSector) {
@@ -132,6 +191,30 @@ const Market = () => {
                         ))}
                     </select>
                 )}
+
+                {/* Manual Refresh Button */}
+                <button
+                    onClick={async () => {
+                        setLoading(true);
+                        const data = await stockService.getAllStocks(selectedSector);
+                        setStocks(data);
+                        // Also refresh indices and sectors if in those modes
+                        if (viewMode === 'indices') {
+                            const indicesData = await stockService.getMarketIndices();
+                            setIndices(indicesData);
+                        } else if (viewMode === 'sectors') {
+                            const sectorsData = await stockService.getSectors();
+                            setSectors(sectorsData);
+                        }
+                        setLoading(false);
+                    }}
+                    className="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-500"
+                    title="Refresh Data"
+                >
+                    <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </button>
             </div>
 
             {/* Main Market Indices View */}
@@ -148,7 +231,8 @@ const Market = () => {
                                 <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">
                                     {parseFloat(index.current_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </p>
-                                <p className={`text-sm font-bold ${parseFloat(index.change) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                <p className={`text-sm font-bold ${parseFloat(index.change) > 0 ? 'text-green-500' : parseFloat(index.change) < 0 ? 'text-red-500' : 'text-blue-500'
+                                    }`}>
                                     {parseFloat(index.change) > 0 ? '+' : ''}{parseFloat(index.change).toFixed(2)} ({parseFloat(index.change_percent).toFixed(2)}%)
                                 </p>
                             </div>
@@ -183,7 +267,8 @@ const Market = () => {
                                                 <p className="text-lg font-bold text-gray-800 dark:text-gray-100">
                                                     {parseFloat(subindex.current_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                 </p>
-                                                <p className={`text-xs font-bold ${parseFloat(subindex.change) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                <p className={`text-xs font-bold ${parseFloat(subindex.change) > 0 ? 'text-green-500' : parseFloat(subindex.change) < 0 ? 'text-red-500' : 'text-blue-500'
+                                                    }`}>
                                                     {parseFloat(subindex.change) > 0 ? '+' : ''}{parseFloat(subindex.change).toFixed(2)} ({parseFloat(subindex.change_percent).toFixed(2)}%)
                                                 </p>
                                             </div>
@@ -251,7 +336,8 @@ const Market = () => {
                                     </td>
                                     <td className="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{stock.sector_name || '-'}</td>
                                     <td className="px-4 py-4 font-medium dark:text-white">Rs. {parseFloat(stock.last_price).toLocaleString()}</td>
-                                    <td className={`px-4 py-4 font-medium ${parseFloat(stock.change) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                    <td className={`px-4 py-4 font-medium ${parseFloat(stock.change) > 0 ? 'text-green-500' : parseFloat(stock.change) < 0 ? 'text-red-500' : 'text-blue-500'
+                                        }`}>
                                         {parseFloat(stock.change) > 0 ? '+' : ''}{parseFloat(stock.change_percent).toFixed(2)}%
                                     </td>
                                     <td className="px-4 py-4">

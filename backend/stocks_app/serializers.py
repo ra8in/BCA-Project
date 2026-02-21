@@ -57,3 +57,13 @@ class StockSerializer(serializers.ModelSerializer):
             limit = base * Decimal('0.90')
             return float(format(limit, '.1f'))
         return None
+
+
+class StockHistorySerializer(serializers.ModelSerializer):
+    """Serializer for OHLCV history data"""
+    timestamp = serializers.DateTimeField(format="%Y-%m-%d")
+    
+    class Meta:
+        from .models import StockPrice
+        model = StockPrice
+        fields = ['timestamp', 'open', 'high', 'low', 'close', 'volume']

@@ -94,10 +94,12 @@ const Portfolio = () => {
                     </div>
                     <div>
                         <p className="text-blue-100 text-sm font-medium mb-1">Unrealized P/L</p>
-                        <p className={`text-2xl font-bold ${parseFloat(total_profit_loss) >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                        <p className={`text-2xl font-bold ${parseFloat(total_profit_loss) > 0 ? 'text-green-300' : parseFloat(total_profit_loss) < 0 ? 'text-red-300' : 'text-white'
+                            }`}>
                             ₹{parseFloat(total_profit_loss).toLocaleString()}
                         </p>
-                        <p className={`text-xs ${parseFloat(total_profit_loss_percent) >= 0 ? 'text-green-200' : 'text-red-200'}`}>
+                        <p className={`text-xs ${parseFloat(total_profit_loss_percent) > 0 ? 'text-green-200' : parseFloat(total_profit_loss_percent) < 0 ? 'text-red-200' : 'text-gray-200'
+                            }`}>
                             ({parseFloat(total_profit_loss_percent).toFixed(2)}%)
                         </p>
                     </div>
@@ -182,7 +184,8 @@ const Portfolio = () => {
                                             <td className="px-6 py-4 text-gray-600 dark:text-gray-400">₹{parseFloat(holding.average_buy_price).toFixed(2)}</td>
                                             <td className="px-6 py-4 font-medium dark:text-white">₹{parseFloat(holding.current_price).toFixed(2)}</td>
                                             <td className="px-6 py-4 font-medium dark:text-white">₹{parseFloat(holding.market_value).toLocaleString()}</td>
-                                            <td className={`px-6 py-4 font-medium ${holding.profit_loss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                            <td className={`px-6 py-4 font-medium ${holding.profit_loss > 0 ? 'text-green-500' : holding.profit_loss < 0 ? 'text-red-500' : 'text-blue-500'
+                                                }`}>
                                                 ₹{parseFloat(holding.profit_loss).toLocaleString()}
                                                 <span className="text-xs ml-1">({parseFloat(holding.profit_loss_percent).toFixed(2)}%)</span>
                                             </td>
@@ -241,7 +244,8 @@ const Portfolio = () => {
                                                 <td className="px-6 py-4 text-gray-700 dark:text-gray-300">{item.stock_name}</td>
                                                 <td className="px-6 py-4 text-gray-700 dark:text-gray-300">{item.total_qty_sold}</td>
                                                 <td className="px-6 py-4 font-medium dark:text-white">₹{parseFloat(item.total_sell_value).toLocaleString()}</td>
-                                                <td className={`px-6 py-4 font-bold ${item.total_realized_pl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                <td className={`px-6 py-4 font-bold ${item.total_realized_pl > 0 ? 'text-green-500' : item.total_realized_pl < 0 ? 'text-red-500' : 'text-blue-500'
+                                                    }`}>
                                                     ₹{parseFloat(item.total_realized_pl).toLocaleString()}
                                                 </td>
                                             </tr>

@@ -1,21 +1,59 @@
 """
-Stock price services - ShareHub API client and price update utilities.
+Stock price services - NEPSE API client and price update utilities.
 
 This module handles:
-1. Fetching stock prices from ShareHub Nepal API
+1. Fetching stock prices from NEPSE official API (via nepse-data-api)
 2. Updating all stock prices in the database (market data refresh)
+3. Smart cached on-demand market depth and stock prices (adaptive TTL)
 """
 
 import logging
-import requests
 from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
+from django.core.cache import cache
+import time
 
 logger = logging.getLogger(__name__)
 
-# ShareHub API endpoint
-SHAREHUB_API_URL = "https://sharehubnepal.com/live/api/v2/nepselive/home-page-data"
+
+# ===== CACHE TTL CONFIGURATION =====
+# During market hours: refresh every ~1 minute (matches NEPSE API update frequency)
+# During market close: cache permanently (data is static until next trading day)
+MARKET_OPEN_TTL = 60          # 60 seconds when market is live (NEPSE updates ~1 min)
+MARKET_CLOSED_TTL = 86400     # 24 hours when market is closed (data is static)
+THROTTLE_DELAY = 2            # 2 seconds minimum between on-demand requests per user/IP
+
+
+def _get_cache_ttl():
+    """Get the appropriate cache TTL based on market status."""
+    from stocks_app.market_hours import is_market_open
+    from datetime import datetime
+    
+    is_open = is_market_open()
+    
+    if is_open:
+        # Align cache expiry to the start of the next minute (HH:MM:00)
+        # This ensures we don't fetch API multiple times within the same minute bucket
+        now = datetime.now()
+        seconds_remaining = 60 - now.second
+        # Minimum safe TTL is 1 second
+        return max(1, seconds_remaining)
+        
+    return MARKET_CLOSED_TTL
+
+
+# ===== NEPSE API Client (nepse-data-api) =====
+# Lazy initialization to avoid import-time network calls
+_nepse_client = None
+
+def _get_nepse_client():
+    """Get or create the Nepse API client (lazy singleton)."""
+    global _nepse_client
+    if _nepse_client is None:
+        from nepse_data_api import Nepse
+        _nepse_client = Nepse(cache_ttl=15, enable_cache=True)
+    return _nepse_client
 
 
 def safe_decimal(value, default=Decimal('0')) -> Decimal:
@@ -28,114 +66,651 @@ def safe_decimal(value, default=Decimal('0')) -> Decimal:
         return default
 
 
-def fetch_market_data_from_sharehub() -> dict:
+# ===== INDEX CONFIGURATION =====
+# Main indices (from get_nepse_index) - these have live values
+MAIN_INDEX_SYMBOLS = {
+    'NEPSE Index': 'NEPSE',
+    'Float Index': 'Float',
+    'Sensitive Index': 'Sensitive',
+    'Sensitive Float Index': 'SensitiveFloat',
+}
+
+# Sub-index to sector mapping (from get_all_indices sectorMaster)
+SUB_INDEX_SECTOR_MAP = {
+    'Banking SubIndex': 'Commercial Banks',
+    'Development Bank Index': 'Development Banks',
+    'Finance Index': 'Finance',
+    'Hotels And Tourism Index': 'Hotels And Tourism',
+    'HydroPower Index': 'Hydro Power',
+    'Investment Index': 'Investment',
+    'Life Insurance': 'Life Insurance',
+    'Manufacturing And Processing': 'Manufacturing And Processing',
+    'Microfinance Index': 'Microfinance',
+    'Mutual Fund': 'Mutual Fund',
+    'Non Life Insurance': 'Non Life Insurance',
+    'Others Index': 'Others',
+    'Trading Index': 'Tradings',
+}
+
+# Sub-index name to symbol mapping
+SUB_INDEX_SYMBOL_MAP = {
+    'Banking SubIndex': 'BANKING',
+    'Development Bank Index': 'DEVBANK',
+    'Finance Index': 'FINANCE',
+    'Hotels And Tourism Index': 'HOTEL',
+    'HydroPower Index': 'HYDRO',
+    'Investment Index': 'INVESTMENT',
+    'Life Insurance': 'LIFE_INS',
+    'Manufacturing And Processing': 'MANUFACTURING',
+    'Microfinance Index': 'MICROFINANCE',
+    'Mutual Fund': 'MUTUAL_FUND',
+    'Non Life Insurance': 'NONLIFE_INS',
+    'Others Index': 'OTHERS',
+    'Trading Index': 'TRADING',
+}
+
+
+def fetch_all_companies() -> list:
     """
-    Fetch ALL market data from ShareHub Nepal API in one request.
-    Returns stocks, indices, and sub-indices data.
+    Fetch ALL active companies from NEPSE API (via nepse-data-api library).
     
+    This is the master source for ensuring all tradable securities exist in the database.
+    Unlike get_stocks() which only returns actively traded stocks, this returns ALL
+    active companies regardless of whether they traded today.
+    
+    Returns:
+        list of dicts with company info:
+            - id: NEPSE security ID
+            - symbol: Stock symbol
+            - name: Company full name
+            - sector: Sector name
+            - status: Active status ('A', 'S', 'D')
+            - instrumentType: Type of instrument (e.g., 'Equity')
+    """
+    try:
+        nepse = _get_nepse_client()
+        
+        # Fetch all companies
+        all_companies = nepse.get_company_list()
+        
+        if not all_companies:
+            logger.warning("get_company_list() returned empty list")
+            return []
+        
+        # Filter for active companies only (status='A')
+        active_companies = [
+            {
+                'id': comp.get('id'),
+                'symbol': comp.get('symbol'),
+                'name': comp.get('companyName', comp.get('securityName', comp.get('symbol'))),
+                'sector': comp.get('sectorName'),
+                'status': comp.get('status'),
+                'instrumentType': comp.get('instrumentType', 'Equity'),
+            }
+            for comp in all_companies
+            if comp.get('status') == 'A'  # Active only
+        ]
+        
+        logger.info(f"Fetched {len(active_companies)} active companies (from {len(all_companies)} total)")
+        return active_companies
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch company list from NEPSE API: {e}")
+        return []
+
+
+def fetch_market_data() -> dict:
+    """
+    Fetch ALL market data from NEPSE official API (via nepse-data-api library).
+    Returns stocks, indices, and sub-indices data.
+
     Returns:
         dict with 'stocks', 'indices', and 'subIndices' keys
     """
     try:
-        response = requests.get(SHAREHUB_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        nepse = _get_nepse_client()
+        from datetime import datetime
+
+        # ------- 1. STOCKS (Hybrid: today-price + security details) -------
+        # Strategy:
+        # A. Fetch 'today-price' via manual POST (works when market OPEN and CLOSED)
+        # B. Compare with 'company_list' to find non-traded stocks
+        # C. Fetch 'security_details' for non-traded stocks
         
-        # Extract stock data from liveCompanyData
         stock_prices = {}
-        for stock in data.get('liveCompanyData', []):
+        
+        # A. Fetch Traded Stocks (Today Price)
+        try:
+            url = f"{nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500"
+            # 0 is the generic market ID
+            payload_id = nepse._get_floorsheet_payload_id(0, datetime.now())
+            payload = {"id": payload_id}
+            
+            response = nepse.session.post(url, headers=nepse._get_auth_headers(), json=payload)
+            # Don't raise immediately, handle gracefully
+            if response.status_code == 200:
+                data = response.json()
+                stocks_raw = data.get('content', data) if isinstance(data, dict) else data
+            else:
+                logger.warning(f"today-price endpoint returned {response.status_code}")
+                # Fallback to standard get_stocks if manual post fails (though get_stocks might be empty)
+                stocks_raw = nepse.get_stocks()
+        except Exception as e:
+            logger.warning(f"Failed to fetch today-price (manual): {e}")
+            stocks_raw = nepse.get_stocks()
+            
+        # Process Traded Stocks
+        for stock in (stocks_raw or []):
             symbol = stock.get('symbol')
-            if symbol:
-                stock_prices[symbol] = {
-                    'ltp': safe_decimal(stock.get('lastTradedPrice')),
-                    'change': safe_decimal(stock.get('change')),
-                    'change_percent': safe_decimal(stock.get('percentageChange')),
-                    'open': safe_decimal(stock.get('openPrice')),
-                    'high': safe_decimal(stock.get('highPrice')),
-                    'low': safe_decimal(stock.get('lowPrice')),
-                    'volume': stock.get('totalTradeQuantity') or 0,
-                    'previous_close': safe_decimal(stock.get('previousClose')),
-                    'transactions': stock.get('totalTransactions') or 0,
-                    'turnover': safe_decimal(stock.get('totalTradeValue')),
-                }
-        
-        # Extract main indices (NEPSE, Float, Sensitive, etc.)
+            if not symbol: continue
+            
+            stock_prices[symbol] = {
+                'ltp': safe_decimal(stock.get('lastTradedPrice') or stock.get('closePrice')),
+                'change': safe_decimal(stock.get('diff', 0)) if 'diff' in stock else \
+                         (safe_decimal(stock.get('lastTradedPrice', 0)) - safe_decimal(stock.get('previousDayClosePrice', 0) or stock.get('previousClose', 0))),
+                'change_percent': safe_decimal(stock.get('percentageChange')),
+                'open': safe_decimal(stock.get('openPrice')),
+                'high': safe_decimal(stock.get('highPrice')),
+                'low': safe_decimal(stock.get('lowPrice')),
+                'volume': stock.get('totalTradedQuantity') or stock.get('totalTradeQuantity') or 0,
+                'previous_close': safe_decimal(stock.get('previousDayClosePrice') or stock.get('previousClose')),
+                'transactions': stock.get('totalTrades') or 0,
+                'turnover': safe_decimal(stock.get('totalTradedValue') or stock.get('totalTradeValue')),
+                'last_updated': stock.get('lastUpdatedTime') or stock.get('lastUpdatedDateTime'),
+                'source': 'live_hybrid'
+            }
+
+
+
+        # ------- 2. MAIN INDICES (get_nepse_index → live values) -------
+        indices_raw = nepse.get_nepse_index()
         indices = {}
-        for idx in data.get('indices', []):
-            symbol = idx.get('symbol')
-            if symbol:
-                indices[symbol] = {
-                    'name': idx.get('name'),
-                    'current_value': safe_decimal(idx.get('currentValue')),
-                    'change': safe_decimal(idx.get('change')),
-                    'change_percent': safe_decimal(idx.get('changePercent')),
-                }
-        
-        # Extract sub-indices (Banking, Hydropower, etc.)
+
+        for idx in (indices_raw or []):
+            index_name = idx.get('index')
+            if not index_name:
+                continue
+
+            symbol = MAIN_INDEX_SYMBOLS.get(index_name, index_name)
+
+            indices[symbol] = {
+                'name': index_name,
+                'current_value': safe_decimal(idx.get('currentValue')),
+                'change': safe_decimal(idx.get('change')),
+                'change_percent': safe_decimal(idx.get('perChange')),
+            }
+
+        # ------- 3. SUB-INDICES (get_sub_indices → sector indices) -------
+        sub_indices_raw = nepse.get_sub_indices()
         sub_indices = {}
-        for idx in data.get('subIndices', []):
-            symbol = idx.get('symbol')
-            if symbol:
-                sub_indices[symbol] = {
-                    'name': idx.get('name'),
-                    'current_value': safe_decimal(idx.get('currentValue')),
-                    'change': safe_decimal(idx.get('change')),
-                    'change_percent': safe_decimal(idx.get('changePercent')),
-                    'sector': idx.get('sector'),
-                }
-        
-        logger.info(f"Fetched {len(stock_prices)} stocks, {len(indices)} indices, {len(sub_indices)} sub-indices")
-        
+
+        for idx in (sub_indices_raw or []):
+            index_name = idx.get('index')
+            if not index_name:
+                continue
+
+            symbol = SUB_INDEX_SYMBOL_MAP.get(index_name,
+                        index_name.upper().replace(' ', '_'))
+            sector = SUB_INDEX_SECTOR_MAP.get(index_name, index_name)
+
+            sub_indices[symbol] = {
+                'name': index_name,
+                'current_value': safe_decimal(idx.get('currentValue')),
+                'change': safe_decimal(idx.get('change')),
+                'change_percent': safe_decimal(idx.get('perChange')),
+                'sector': sector,
+            }
+
+        logger.info(
+            f"Fetched {len(stock_prices)} stocks (Hybrid), "
+            f"{len(indices)} indices, "
+            f"{len(sub_indices)} sub-indices from NEPSE API"
+        )
+
         return {
             'stocks': stock_prices,
             'indices': indices,
-            'subIndices': sub_indices
+            'subIndices': sub_indices,
         }
-        
-    except requests.RequestException as e:
-        logger.error(f"Failed to fetch from ShareHub API: {e}")
-        return {'stocks': {}, 'indices': {}, 'subIndices': {}}
+
     except Exception as e:
-        logger.error(f"Error parsing ShareHub API response: {e}")
+        logger.error(f"Failed to fetch from NEPSE API: {e}")
         return {'stocks': {}, 'indices': {}, 'subIndices': {}}
+
+
+def fill_missing_stock_prices():
+    """
+    Fetch and update details for active stocks that have NO price data (newly added).
+    This runs after the main update to 'heal' missing data without
+    re-fetching dormant stocks that already have valid history.
+    """
+    from stocks_app.models import Stock
+    nepse = _get_nepse_client()
+
+    # Find active stocks with no price (or 0)
+    missing_stocks = Stock.objects.filter(is_active=True, last_price__isnull=True) | \
+                     Stock.objects.filter(is_active=True, last_price=0)
+    
+    count = missing_stocks.count()
+    if count == 0:
+        return
+
+    logger.info(f"Refining data for {count} stocks with missing prices...")
+    updated = 0
+
+    for stock in missing_stocks:
+        try:
+            # security_id is needed. If missing, we can't fetch.
+            if not stock.nepse_security_id:
+                # Try to find ID from symbol map if possible (rare case)
+                continue
+
+            time.sleep(0.5) # Be gentle
+            details = nepse.get_security_details(stock.nepse_security_id)
+            sec_data = details.get('securityMcsData', {})
+
+            if sec_data:
+                # Update Stock directly
+                stock.last_price = safe_decimal(sec_data.get('lastTradedPrice'))
+                stock.open_price = safe_decimal(sec_data.get('openPrice'))
+                stock.high_price = safe_decimal(sec_data.get('highPrice'))
+                stock.low_price = safe_decimal(sec_data.get('lowPrice'))
+                stock.previous_close = safe_decimal(sec_data.get('previousClose'))
+                stock.total_trade_quantity = 0 # Assume 0 if we are here (not in today-price)
+                
+                stock.save(update_fields=[
+                    'last_price', 'open_price', 'high_price', 'low_price', 
+                    'previous_close', 'total_trade_quantity'
+                ])
+                updated += 1
+                
+        except Exception as e:
+            logger.warning(f"Failed to fill missing price for {stock.symbol}: {e}")
+
+    logger.info(f"Filled prices for {updated}/{count} missing stocks")
+
+
+# ===== ON-DEMAND CACHED FUNCTIONS (60s TTL + Throttling) =====
+
+def _check_throttle(cache_key: str, delay_seconds: int = THROTTLE_DELAY) -> bool:
+    """
+    Check if request is throttled (too soon after last request).
+    
+    Returns:
+        True if throttled (should deny request), False if allowed
+    """
+    last_request_time = cache.get(cache_key)
+    if last_request_time:
+        elapsed = time.time() - last_request_time
+        if elapsed < delay_seconds:
+            logger.debug(f"Throttled: {cache_key}, {delay_seconds - elapsed:.1f}s remaining")
+            return True
+    return False
+
+
+def _set_throttle(cache_key: str, delay_seconds: int = THROTTLE_DELAY):
+    """Mark this request time for throttling."""
+    cache.set(cache_key, time.time(), delay_seconds)
+
+
+def get_cached_market_depth(symbol: str, client_id: str = 'anonymous') -> dict:
+    """
+    Get market depth with 60-second cache and per-client throttling.
+    
+    Args:
+        symbol: Stock symbol (e.g., 'NABIL')
+        client_id: Unique client identifier (user ID or IP address)
+    
+    Returns:
+        Market depth data with buy/sell orders
+    """
+    symbol = symbol.upper()
+    cache_key = f"market_depth:{symbol}"
+    throttle_key = f"throttle:market_depth:{client_id}:{symbol}"
+    
+    # Check throttle FIRST (before checking cache)
+    # This prevents rapid successive requests even if cached
+    if _check_throttle(throttle_key):
+        # Return cached data if available, empty dict if not
+        cached = cache.get(cache_key)
+        if cached:
+            logger.debug(f"Market depth throttled but returning cached data for {symbol}")
+            return cached
+        else:
+            logger.warning(f"Market depth throttled and no cache for {symbol}")
+            return {'error': 'Please wait before requesting again', 'throttled': True}
+    
+    # Try cache
+    cached = cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"Market depth cache HIT for {symbol}")
+        _set_throttle(throttle_key)  # Set throttle even on cache hit
+        return cached
+    
+    # Cache MISS - fetch from API
+    logger.debug(f"Market depth cache MISS for {symbol}")
+    nepse = _get_nepse_client()
+    
+    try:
+        depth = nepse.get_market_depth(symbol)
+        
+        # Store in cache with smart TTL
+        cache.set(cache_key, depth, _get_cache_ttl())
+        
+        # Set throttle
+        _set_throttle(throttle_key)
+        
+        return depth
+    except Exception as e:
+        logger.error(f"Failed to fetch market depth for {symbol}: {e}")
+        return {'error': str(e)}
+
+
+def get_cached_stock_price(symbol: str, client_id: str = 'anonymous') -> dict:
+    """
+    Get single stock price with 60-second cache and per-client throttling.
+    Falls back to database data when market is closed or API unavailable.
+    
+    Args:
+        symbol: Stock symbol (e.g., 'NABIL')
+        client_id: Unique client identifier (user ID or IP address)
+    
+    Returns:
+        Stock price data (ltp, change, volume, etc.)
+    """
+    from stocks_app.models import Stock
+    
+    symbol = symbol.upper()
+    cache_key = f"stock_price:{symbol}"
+    throttle_key = f"throttle:stock_price:{client_id}:{symbol}"
+    
+    # Check throttle (allow 5 requests per second to handle bursts/double-firing)
+    if _check_throttle(throttle_key, limit=5, period=1):
+        cached = cache.get(cache_key)
+        if cached:
+            logger.debug(f"Stock price throttled but returning cached data for {symbol}")
+            return cached
+        else:
+            logger.warning(f"Stock price throttled and no cache for {symbol}")
+            return {'error': 'Please wait before requesting again', 'throttled': True}
+    
+    # Try cache
+    cached = cache.get(cache_key)
+    if cached is not None:
+        logger.debug(f"Stock price cache HIT for {symbol}")
+        _set_throttle(throttle_key)
+        return cached
+    
+    # Cache MISS - try API first, then fallback to DB
+    logger.debug(f"Stock price cache MISS for {symbol}. Fetching global market data...")
+    nepse = _get_nepse_client()
+    
+    result = None
+    
+    try:
+        # 1. Fetch ALL stocks using today-price API logic (based on stocks_ohlcv.py)
+        # We manually call the API to handle dictionary/list responses robustly
+        from datetime import datetime
+        
+        # Use a safe wrapper for get_today_price or manual call if needed
+        # Since nepse_data_api might have issues, we use a robust approach
+        try:
+            # Try standard method first
+            all_stocks = nepse.get_today_price()
+        except Exception:
+             # Fallback: manually construct request if library method fails
+            logger.warning("nepse.get_today_price() failed, trying manual request...")
+            url = f"{nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500"
+            payload_id = nepse._get_floorsheet_payload_id(0, datetime.now())
+            payload = {"id": payload_id}
+            response = nepse.session.post(url, headers=nepse._get_auth_headers(), json=payload)
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict) and 'content' in data:
+                all_stocks = data['content']
+            elif isinstance(data, list):
+                all_stocks = data
+            else:
+                all_stocks = []
+
+        # If today-price is empty (e.g. market just opened or closed), we prefer to return empty or handle gracefully
+        # User requested to relying ONLY on today-price
+        if not all_stocks:
+             logger.warning("today-price returned empty.")
+
+        if all_stocks:
+            # Optimize: Cache EVERY stock found in the list
+            ttl = _get_cache_ttl()
+            
+            for stock_data in all_stocks:
+                s_symbol = stock_data.get('symbol')
+                if not s_symbol:
+                    continue
+                    
+                # Normalize data format
+                # During market hours, 'lastTradedPrice' is the key. 'closePrice' is often null.
+                ltp_value = stock_data.get('lastTradedPrice') or stock_data.get('closePrice')
+                
+                formatted_data = {
+                    'symbol': s_symbol,
+                    'ltp': safe_decimal(ltp_value),
+                    'change': safe_decimal(stock_data.get('lastTradedPrice', 0)) - safe_decimal(stock_data.get('previousClose', 0) or stock_data.get('previousDayClosePrice', 0)),
+                    'change_percent': safe_decimal(stock_data.get('percentageChange') or stock_data.get('perChange')),
+                    'open': safe_decimal(stock_data.get('openPrice')),
+                    'high': safe_decimal(stock_data.get('highPrice')),
+                    'low': safe_decimal(stock_data.get('lowPrice')),
+                    'volume': stock_data.get('totalTradeQuantity') or stock_data.get('totalTradedQuantity') or 0,
+                    'previous_close': safe_decimal(stock_data.get('previousClose') or stock_data.get('previousDayClosePrice')),
+                    'turnover': safe_decimal(stock_data.get('totalTradeValue') or stock_data.get('totalTradedValue')),
+                    'last_updated': stock_data.get('lastUpdatedDateTime'),
+                    'source': 'live',
+                }
+                
+                # Cache this specific stock
+                s_cache_key = f"stock_price:{s_symbol}"
+                cache.set(s_cache_key, formatted_data, ttl)
+                
+                # If this is the requested symbol, set it as result
+                if s_symbol == symbol:
+                    result = formatted_data
+            
+            # If we found our result, return it
+            if result:
+                 _set_throttle(throttle_key)
+                 return result
+
+    except Exception as e:
+        logger.warning(f"API fetch failed for {symbol}: {e}")
+    
+    # Fallback to database if API returned nothing or symbol not found in API list
+    if result is None:
+        try:
+            stock = Stock.objects.get(symbol=symbol)
+            result = {
+                'symbol': symbol,
+                'ltp': stock.last_price,
+                'change': stock.change,
+                'change_percent': stock.change_percent,
+                'open': stock.open_price or stock.last_price,
+                'high': stock.high_price or stock.last_price,
+                'low': stock.low_price or stock.last_price,
+                'volume': stock.total_trade_quantity,
+                'previous_close': stock.previous_close,
+                'turnover': stock.total_traded_value,
+                'last_updated': None,
+                'source': 'database',  # Indicates data is from DB, not live
+            }
+            logger.info(f"Using DB fallback for {symbol} (market likely closed)")
+        except Stock.DoesNotExist:
+            return {'error': f'Stock {symbol} not found'}
+    
+    
+    # Cache the result with smart TTL
+    cache.set(cache_key, result, _get_cache_ttl())
+    _set_throttle(throttle_key)
+    
+    return result
+
+
+def get_cached_market_indices() -> list:
+    """
+    Get live market indices with smart caching.
+    Fetches from NEPSE API if cache miss/stale, updates DB, and returns data.
+    """
+    from stocks_app.models import MarketIndex
+    
+    cache_key = "market_indices_live"
+    cached = cache.get(cache_key)
+    
+    if cached:
+        return cached
+        
+    # Cache MISS - fetch from API
+    logger.info("Fetching live market indices from NEPSE...")
+    nepse = _get_nepse_client()
+    
+    try:
+        # Fetch live data
+        indices_data = nepse.get_market_index()
+        
+        # Update Database
+        updated_indices = []
+        for item in indices_data:
+            idx, _ = MarketIndex.objects.update_or_create(
+                symbol=item['index'],
+                defaults={
+                    'name': item['index'],
+                    'current_value': safe_decimal(item['currentValue']),
+                    'change': safe_decimal(item['change']),
+                    'change_percent': safe_decimal(item['perChange'])
+                }
+            )
+            updated_indices.append({
+                'id': idx.id,
+                'name': idx.name,
+                'symbol': idx.symbol,
+                'current_value': idx.current_value,
+                'change': idx.change,
+                'change_percent': idx.change_percent
+            })
+            
+        # Sort by name to match view logic
+        updated_indices.sort(key=lambda x: x['name'])
+        
+        # Cache result
+        cache.set(cache_key, updated_indices, _get_cache_ttl())
+        
+        return updated_indices
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch live indices: {e}")
+        # Fallback to DB
+        indices = MarketIndex.objects.all().order_by('name')
+        from stocks_app.serializers import MarketIndexSerializer
+        return MarketIndexSerializer(indices, many=True).data
+
+
+def get_cached_sub_indices() -> list:
+    """
+    Get live sub-indices (sectors) with smart caching.
+    Fetches from NEPSE API if cache miss/stale, updates DB, and returns data.
+    """
+    from stocks_app.models import SubIndex, Sector
+    
+    cache_key = "sub_indices_live"
+    cached = cache.get(cache_key)
+    
+    if cached:
+        return cached
+        
+    # Cache MISS - fetch from API
+    logger.info("Fetching live sub-indices from NEPSE...")
+    nepse = _get_nepse_client()
+    
+    try:
+        # Fetch live data
+        sub_indices_data = nepse.get_sub_indices()
+        
+        # Update Database
+        updated_subindices = []
+        for item in sub_indices_data:
+            # Find sector (optional, just for linkage if needed)
+            sector = Sector.objects.filter(name__iexact=item['index']).first()
+            
+            sub, _ = SubIndex.objects.update_or_create(
+                symbol=item['index'],
+                defaults={
+                    'name': item['index'],
+                    'current_value': safe_decimal(item['currentValue']),
+                    'change': safe_decimal(item['change']),
+                    'change_percent': safe_decimal(item['perChange']),
+                    'sector': sector
+                }
+            )
+            updated_subindices.append({
+                'id': sub.id,
+                'name': sub.name,
+                'symbol': sub.symbol,
+                'current_value': sub.current_value,
+                'change': sub.change,
+                'change_percent': sub.change_percent,
+                'sector': sub.sector.id if sub.sector else None
+            })
+            
+        # Sort by name
+        updated_subindices.sort(key=lambda x: x['name'])
+        
+        # Cache result
+        cache.set(cache_key, updated_subindices, _get_cache_ttl())
+        
+        return updated_subindices
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch live sub-indices: {e}")
+        # Fallback to DB
+        subs = SubIndex.objects.select_related('sector').order_by('name')
+        from stocks_app.serializers import SubIndexSerializer
+        return SubIndexSerializer(subs, many=True).data
+
+
 
 
 def update_all_market_data() -> dict:
     """
     Update database cache for ALL stocks and indices.
-    
-    Fetches fresh data from ShareHub API and updates:
+
+    Fetches fresh data from NEPSE API and updates:
     - Stock.last_price and related fields
     - MarketIndex values (NEPSE, Float, Sensitive)
     - SubIndex values (Banking, Hydropower, etc.)
-    
+
     Returns:
         dict with counts of updated items
     """
     from stocks_app.models import Stock, MarketIndex, SubIndex
-    
-    logger.info("Starting market data update from ShareHub API...")
-    
-    # Fetch all data in one API call
-    market_data = fetch_market_data_from_sharehub()
-    
+
+    logger.info("Starting market data update from NEPSE API...")
+
+    # Fetch all data
+    market_data = fetch_market_data()
+
     stock_prices = market_data.get('stocks', {})
     indices = market_data.get('indices', {})
     sub_indices = market_data.get('subIndices', {})
-    
+
     if not stock_prices and not indices:
-        logger.warning("No market data received from ShareHub API")
+        logger.warning("No market data received from NEPSE API")
         return {'stocks': 0, 'indices': 0, 'subIndices': 0}
-    
+
     stocks_updated = 0
     indices_updated = 0
     subindices_updated = 0
-    
+
     # 1. Update stocks
     for stock in Stock.objects.filter(is_active=True):
         try:
             stock_data = stock_prices.get(stock.symbol)
-            
+
             if stock_data:
                 stock.last_price = stock_data['ltp']
                 stock.change = stock_data['change']
@@ -154,43 +729,46 @@ def update_all_market_data() -> dict:
                     'total_traded_value', 'total_trades'
                 ])
                 stocks_updated += 1
-                
+
         except Exception as e:
             logger.warning(f"Failed to update stock {stock.symbol}: {e}")
             continue
-    
+
     # 2. Update main indices (NEPSE, Float, Sensitive)
     for market_idx in MarketIndex.objects.all():
         try:
             idx_data = indices.get(market_idx.symbol)
-            
+
             if idx_data:
                 market_idx.current_value = idx_data['current_value']
                 market_idx.change = idx_data['change']
                 market_idx.change_percent = idx_data['change_percent']
                 market_idx.save(update_fields=['current_value', 'change', 'change_percent'])
                 indices_updated += 1
-                
+
         except Exception as e:
             logger.warning(f"Failed to update index {market_idx.symbol}: {e}")
             continue
-    
+
     # 3. Update sub-indices (Banking, Hydropower, etc.)
     for sub_idx in SubIndex.objects.all():
         try:
             idx_data = sub_indices.get(sub_idx.symbol)
-            
+
             if idx_data:
                 sub_idx.current_value = idx_data['current_value']
                 sub_idx.change = idx_data['change']
                 sub_idx.change_percent = idx_data['change_percent']
                 sub_idx.save(update_fields=['current_value', 'change', 'change_percent'])
                 subindices_updated += 1
-                
+
         except Exception as e:
             logger.warning(f"Failed to update sub-index {sub_idx.symbol}: {e}")
             continue
-    
+
+    # 4. Fill missing prices for new/empty stocks (Auto-heal)
+    fill_missing_stock_prices()
+
     logger.info(f"Updated: {stocks_updated} stocks, {indices_updated} indices, {subindices_updated} sub-indices")
     return {'stocks': stocks_updated, 'indices': indices_updated, 'subIndices': subindices_updated}
 
@@ -198,59 +776,72 @@ def update_all_market_data() -> dict:
 def create_end_of_day_stock_prices(target_date=None) -> int:
     """
     Create permanent StockPrice records for all stocks (end-of-day snapshot).
-    
+
     This should be called at 4:30 PM (after NEPSE market close at 3 PM).
     Creates one StockPrice record per stock per day.
-    
+
     Args:
         target_date (datetime, optional): Date to tag the records with. Defaults to now.
-    
+
     Returns:
         Number of StockPrice records created
     """
     from stocks_app.models import Stock, StockPrice
-    
+
     # Use provided date or current time
     timestamp = target_date if target_date else timezone.now()
     logger.info(f"Creating end-of-day stock price records for {timestamp.date()}...")
-    
+
     created_count = 0
-    
+
     for stock in Stock.objects.filter(is_active=True):
         try:
-            # Check if we already have a record for that date
-            existing = StockPrice.objects.filter(
+            # Determine the best price to use
+            closing_price = stock.last_price
+            if not closing_price or closing_price == 0:
+                closing_price = stock.previous_close or Decimal('0')
+                
+            if closing_price == 0:
+                # Still 0? Skip or record 0?
+                # If a stock has no price, we probably shouldn't record 0 history unless valid
+                logger.debug(f"Skipping EOD for {stock.symbol} - no valid price")
+                continue
+
+            # Prepare data
+            defaults = {
+                'open': stock.open_price or closing_price,
+                'high': stock.high_price or closing_price,
+                'low': stock.low_price or closing_price,
+                'close': closing_price,
+                'volume': stock.total_trade_quantity,
+                'timestamp': timestamp # Update timestamp to now if updating
+            }
+            
+            # Check for existing record for this date
+            record = StockPrice.objects.filter(
                 stock=stock,
                 timestamp__date=timestamp.date()
-            ).exists()
-            
-            if existing:
-                # If already exists, we skip (idempotency)
-                continue
-            
-            # Create permanent record
-            StockPrice.objects.create(
-                stock=stock,
-                timestamp=timestamp,
-                open=stock.open_price or stock.last_price,
-                high=stock.high_price or stock.last_price,
-                low=stock.low_price or stock.last_price,
-                close=stock.last_price,
-                volume=stock.total_trade_quantity
-            )
-            
-            # Update previous_close for tomorrow (only if we are processing TODAY's EOD)
-            # If we are backfilling yesterday, updating previous_close might be risky if live data changed?
-            # Actually, ShareHub "previous_close" field is usually reliable.
-            # But let's keep it simple: always update previous_close as it reflects the "last known close".
-            stock.previous_close = stock.last_price
-            stock.save(update_fields=['previous_close'])
-            
+            ).first()
+
+            if record:
+                # Update existing
+                for key, value in defaults.items():
+                    setattr(record, key, value)
+                record.save()
+            else:
+                # Create new
+                StockPrice.objects.create(stock=stock, **defaults)
+
+            # Update previous_close for tomorrow if we have a valid close
+            if closing_price > 0:
+                stock.previous_close = closing_price
+                stock.save(update_fields=['previous_close'])
+
             created_count += 1
-            
+
         except Exception as e:
             logger.error(f"Failed to create StockPrice for {stock.symbol}: {e}")
             continue
-    
-    logger.info(f"Created {created_count} end-of-day StockPrice records for {timestamp.date()}")
+
+    logger.info(f"Processed EOD StockPrice records for {timestamp.date()} (Count: {created_count})")
     return created_count

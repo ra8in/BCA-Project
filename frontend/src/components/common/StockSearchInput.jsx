@@ -156,7 +156,12 @@ const StockSearchInput = ({ onSelect, onEnterFilter, onTypingFilter, initialValu
                                     </div>
                                     <div className="text-right">
                                         <p className="font-bold text-gray-900 dark:text-white">Rs. {parseFloat(stock.last_price).toLocaleString()}</p>
-                                        <p className={`text-xs font-bold ${parseFloat(stock.change_percent) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                        <p className={`text-xs font-bold ${parseFloat(stock.change_percent) > 0
+                                                ? 'text-green-500'
+                                                : parseFloat(stock.change_percent) < 0
+                                                    ? 'text-red-500'
+                                                    : 'text-blue-500'
+                                            }`}>
                                             {parseFloat(stock.change_percent) > 0 ? '+' : ''}{parseFloat(stock.change_percent).toFixed(2)}%
                                         </p>
                                     </div>

@@ -35,7 +35,7 @@ if not CustomUser.objects.filter(username='admin').exists():
     print("Superuser created: admin/admin123")
 END
 
-# Seed LIVE data from ShareHub API on startup
+# Seed LIVE data from NEPSE API on startup
 echo "Checking if database needs seeding..."
 python seed_live_data.py || echo "⚠️  Live data seeding failed - continuing anyway"
 

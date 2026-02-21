@@ -172,7 +172,8 @@ const PortfolioHistory = () => {
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Realized P/L</p>
-                    <p className={`text-2xl font-bold ${totalRealizedPL >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    <p className={`text-2xl font-bold ${totalRealizedPL > 0 ? 'text-green-500' : totalRealizedPL < 0 ? 'text-red-500' : 'text-blue-500'
+                        }`}>
                         Rs. {totalRealizedPL.toLocaleString()}
                     </p>
                 </div>
@@ -231,7 +232,8 @@ const PortfolioHistory = () => {
                                         <td className="px-6 py-4 text-sm font-medium dark:text-white">
                                             Rs. {stock.totalInvested.toLocaleString()}
                                         </td>
-                                        <td className={`px-6 py-4 text-sm font-bold ${stock.realizedPL >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                        <td className={`px-6 py-4 text-sm font-bold ${stock.realizedPL > 0 ? 'text-green-500' : stock.realizedPL < 0 ? 'text-red-500' : 'text-blue-500'
+                                            }`}>
                                             {stock.realizedPL ? `Rs. ${stock.realizedPL.toLocaleString()}` : '-'}
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">

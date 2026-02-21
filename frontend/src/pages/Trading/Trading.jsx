@@ -140,29 +140,38 @@ const Trading = () => {
 
     const [editingOrder, setEditingOrder] = useState(null);
     const [isMarketOpen, setIsMarketOpen] = useState(false);
+    const [refreshDepthTrigger, setRefreshDepthTrigger] = useState(0);
 
-    // Market Status Check
+    // Market Status Check (Clock-Aligned)
     useEffect(() => {
-        const checkMarketStatus = () => {
-            const now = new Date();
-            // Convert to Kathmandu time
-            const nptStr = now.toLocaleString("en-US", { timeZone: "Asia/Kathmandu" });
-            const npt = new Date(nptStr);
-
-            const day = npt.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-            const hour = npt.getHours();
-
-            // Sunday(0) to Thursday(4)
-            const isWeekday = day >= 0 && day <= 4;
-            // 11:00 to 15:00 (3 PM)
-            const isTime = hour >= 11 && hour < 15;
-
-            setIsMarketOpen(isWeekday && isTime);
+        const fetchMarketStatus = async () => {
+            try {
+                const status = await stockService.getMarketStatus();
+                setIsMarketOpen(status?.is_open || false);
+            } catch (err) {
+                console.error("Failed to fetch market status", err);
+            }
         };
 
-        checkMarketStatus();
-        const timer = setInterval(checkMarketStatus, 60000); // Check every minute
-        return () => clearInterval(timer);
+        fetchMarketStatus();
+
+        // Align check to the minute (at :01 seconds)
+        let timeoutId;
+
+        const scheduleNextCheck = () => {
+            const now = new Date();
+            // Wait until next minute exactly (HH:MM:00)
+            const msUntilNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+
+            timeoutId = setTimeout(() => {
+                fetchMarketStatus();
+                scheduleNextCheck();
+            }, msUntilNextMinute);
+        };
+
+        scheduleNextCheck();
+
+        return () => { if (timeoutId) clearTimeout(timeoutId); };
     }, []);
 
     // Toast notification
@@ -186,12 +195,15 @@ const Trading = () => {
                     // Also handle incoming state if mode is passed (e.g. from Buy button elsewhere)
                     if (location.state?.mode) {
                         setMode(location.state.mode);
-                        // Clear state to avoid re-triggering? optional
                     }
                 } catch (err) {
                     console.log("Could not fetch stock details from URL", err);
                     showToast("Stock not found", "error");
                 }
+            } else if (location.state?.symbol) {
+                // 1.5. Check Navigation State (If coming from Market/Portfolio with a symbol but no route param yet)
+                // This fixes the issue where clicking "Trade" redirected to a random stock instead of the selected one
+                navigate(`/trading/${location.state.symbol}`, { state: location.state, replace: true });
             } else {
                 // 2. Root Route (/trading) -> Redirect to Random Stock
                 try {
@@ -274,13 +286,13 @@ const Trading = () => {
         qty: Math.floor(Math.random() * 500) + 10,
         price: (LTP - ((i + 1) * 0.1)).toFixed(2),
         orders: Math.floor(Math.random() * 5) + 1
-    })), [LTP]);
+    })), [LTP, refreshDepthTrigger]);
 
     const sellDepth = React.useMemo(() => Array.from({ length: 5 }, (_, i) => ({
         qty: Math.floor(Math.random() * 500) + 10,
         price: (LTP + ((i + 1) * 0.1)).toFixed(2),
         orders: Math.floor(Math.random() * 5) + 1
-    })), [LTP]);
+    })), [LTP, refreshDepthTrigger]);
 
     // Helper: Calculate Estimated Net Amount (Sync)
     const calculateEstimatedNet = (order) => {
@@ -451,7 +463,12 @@ const Trading = () => {
                                 <p className="text-3xl font-black text-blue-600 dark:text-blue-400">
                                     {order.symbol ? `Rs. ${parseFloat(selectedStockData?.last_price || 0).toLocaleString()}` : '---'}
                                 </p>
-                                <p className={`text-sm font-black ${parseFloat(selectedStockData?.change || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                <p className={`text-sm font-black ${parseFloat(selectedStockData?.change || 0) > 0
+                                    ? 'text-green-500'
+                                    : parseFloat(selectedStockData?.change || 0) < 0
+                                        ? 'text-red-500'
+                                        : 'text-blue-500'
+                                    }`}>
                                     {order.symbol && selectedStockData?.change !== undefined ? (
                                         `${parseFloat(selectedStockData.change || 0) > 0 ? '+' : ''}${parseFloat(selectedStockData.change || 0).toFixed(2)} (${parseFloat(selectedStockData.change_percent || 0).toFixed(2)}%)`
                                     ) : ''}
@@ -487,10 +504,26 @@ const Trading = () => {
                     {/* Market Depth Table */}
                     <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                         <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center">
-                            <h3 className="font-bold text-gray-700 dark:text-gray-300">Market Depth</h3>
-                            {!isMarketOpen && (
-                                <span className="text-xs font-bold text-red-500 bg-red-100 dark:bg-red-900/30 px-2 py-1 rounded">CLOSED</span>
-                            )}
+                            <div className="flex items-center gap-3">
+                                <h3 className="font-bold text-gray-700 dark:text-gray-300">Market Depth</h3>
+                                {isMarketOpen ? (
+                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-[10px] font-bold uppercase animate-pulse">
+                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                                        LIVE
+                                    </span>
+                                ) : (
+                                    <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full uppercase">CLOSED</span>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => setRefreshDepthTrigger(prev => prev + 1)}
+                                className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg transition-colors text-gray-500"
+                                title="Refresh Depth"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
                         </div>
                         {!isMarketOpen ? (
                             <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm font-bold">

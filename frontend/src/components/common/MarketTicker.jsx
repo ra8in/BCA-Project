@@ -58,7 +58,9 @@ const MarketTicker = ({ selectedSectorId = null }) => {
 
     // Ticker Item Component
     const TickerItem = ({ label, value, change, changePercent }) => {
-        const isUp = parseFloat(change) >= 0;
+        const val = parseFloat(changePercent);
+        const colorClass = val > 0 ? 'text-green-600' : val < 0 ? 'text-red-500' : 'text-blue-500';
+
         return (
             <div className="flex-shrink-0 bg-white dark:bg-gray-800 rounded-lg px-4 py-2 shadow-sm border border-gray-100 dark:border-gray-700 min-w-[160px]">
                 <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase truncate">{label}</p>
@@ -66,8 +68,8 @@ const MarketTicker = ({ selectedSectorId = null }) => {
                     <span className="font-black text-gray-900 dark:text-white text-sm">
                         {parseFloat(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </span>
-                    <span className={`text-xs font-bold ${isUp ? 'text-green-600' : 'text-red-500'}`}>
-                        {isUp ? '+' : ''}{parseFloat(changePercent).toFixed(2)}%
+                    <span className={`text-xs font-bold ${colorClass}`}>
+                        {val > 0 ? '+' : ''}{val.toFixed(2)}%
                     </span>
                 </div>
             </div>

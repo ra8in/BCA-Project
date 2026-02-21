@@ -42,6 +42,7 @@ class MarketIndex(models.Model):
 
 class Stock(models.Model):
     symbol = models.CharField(max_length=20, unique=True)
+    nepse_security_id = models.IntegerField(null=True, blank=True, help_text="NEPSE API Security ID")
     name = models.CharField(max_length=255)
     sector = models.ForeignKey(Sector, on_delete=models.CASCADE, related_name='stocks', null=True, blank=True)
     market_cap = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)

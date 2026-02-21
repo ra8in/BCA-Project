@@ -66,7 +66,7 @@ def run_eod_job():
         logger.info("SCHEDULED EOD UPDATE STARTED")
         logger.info("=" * 60)
         
-        # 1. Fetch latest prices from ShareHub API
+        # 1. Fetch latest prices from NEPSE API
         result = update_all_market_data()
         logger.info(f"Updated market data: {result['stocks']} stocks, {result['indices']} indices, {result['subIndices']} sub-indices")
         
@@ -146,13 +146,10 @@ def check_missed_eod_update():
             sample_record = existing_records.first()
             saved_time = sample_record.timestamp.time()
             
-            if saved_time < time(16, 30):
-                # Data was saved during trading hours - incomplete, need refresh
+            if saved_time < time(15, 0):
+                # Data was saved during trading hours (before 3 PM)
                 needs_update = True
                 print(f"⚠️  EOD data for {target_date.date()} was saved at {saved_time.strftime('%H:%M')} (during trading). Refreshing...")
-                # Delete incomplete records
-                deleted_count = existing_records.delete()[0]
-                print(f"🗑️  Deleted {deleted_count} incomplete records.")
             else:
                 print(f"ℹ️  EOD data for {target_date.date()} already exists (saved at {saved_time.strftime('%H:%M')}). No catch-up needed.")
         

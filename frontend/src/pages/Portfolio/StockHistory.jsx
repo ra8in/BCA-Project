@@ -135,7 +135,8 @@ const StockHistory = () => {
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Realized P/L</p>
-                    <p className={`text-2xl font-bold ${(history?.summary?.realized_pl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    <p className={`text-2xl font-bold ${(history?.summary?.realized_pl || 0) > 0 ? 'text-green-500' : (history?.summary?.realized_pl || 0) < 0 ? 'text-red-500' : 'text-blue-500'
+                        }`}>
                         Rs. {parseFloat(history?.summary?.realized_pl || 0).toLocaleString()}
                     </p>
                 </div>
@@ -210,7 +211,8 @@ const StockHistory = () => {
                                     <td className="px-6 py-4 text-sm font-medium dark:text-white">{tx.quantity}</td>
                                     <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">Rs. {parseFloat(tx.price).toLocaleString()}</td>
                                     <td className="px-6 py-4 text-sm font-medium dark:text-white">Rs. {parseFloat(tx.total).toLocaleString()}</td>
-                                    <td className={`px-6 py-4 text-sm font-bold ${tx.realized_pl > 0 ? 'text-green-500' : tx.realized_pl < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                                    <td className={`px-6 py-4 text-sm font-bold ${tx.realized_pl > 0 ? 'text-green-500' : tx.realized_pl < 0 ? 'text-red-500' : 'text-blue-500'
+                                        }`}>
                                         {tx.realized_pl ? `Rs. ${parseFloat(tx.realized_pl).toLocaleString()}` : '-'}
                                     </td>
                                 </tr>

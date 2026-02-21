@@ -199,7 +199,7 @@ const BuySellCalculator = ({ data, update }) => {
                             <>
                                 <Row label={`CGT (${(result.cgt_rate * 100).toFixed(1)}%)`} value={result.cgt} isDeduction />
                                 <div className="pt-4 mt-4 border-t border-dashed dark:border-gray-700">
-                                    <Row label="Net Profit" value={result.net_profit} color={result.net_profit >= 0 ? 'text-green-500' : 'text-red-500'} bold />
+                                    <Row label="Net Profit" value={result.net_profit} color={result.net_profit > 0 ? 'text-green-500' : result.net_profit < 0 ? 'text-red-500' : 'text-blue-500'} bold />
                                 </div>
                             </>
                         )}

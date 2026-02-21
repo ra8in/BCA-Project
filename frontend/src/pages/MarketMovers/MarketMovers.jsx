@@ -123,7 +123,11 @@ const MarketMovers = () => {
                                         <td className="px-6 py-4 text-right font-medium text-gray-900 dark:text-white">
                                             Rs. {parseFloat(stock.last_price).toLocaleString()}
                                         </td>
-                                        <td className={`px-6 py-4 text-right font-bold ${parseFloat(stock.change_percent) >= 0 ? 'text-green-600' : 'text-red-500'
+                                        <td className={`px-6 py-4 text-right font-bold ${parseFloat(stock.change_percent) > 0
+                                                ? 'text-green-600'
+                                                : parseFloat(stock.change_percent) < 0
+                                                    ? 'text-red-500'
+                                                    : 'text-blue-500'
                                             }`}>
                                             Rs. {parseFloat(stock.change || 0).toFixed(2)} ({parseFloat(stock.change_percent).toFixed(2)}%)
                                         </td>

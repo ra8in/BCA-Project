@@ -344,13 +344,28 @@ const WatchlistWidget = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${parseFloat(item.stock_details?.change_percent || 0) >= 0
-                                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                                }`}>
-                                                {parseFloat(item.stock_details?.change_percent || 0) >= 0 ? '↑' : '↓'}
-                                                {Math.abs(parseFloat(item.stock_details?.change_percent || 0)).toFixed(2)}%
-                                            </span>
+                                            {(() => {
+                                                const changePct = parseFloat(item.stock_details?.change_percent || 0);
+                                                let badgeClass = '';
+                                                let icon = '';
+
+                                                if (changePct > 0) {
+                                                    badgeClass = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+                                                    icon = '↑';
+                                                } else if (changePct < 0) {
+                                                    badgeClass = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+                                                    icon = '↓';
+                                                } else {
+                                                    badgeClass = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+                                                    icon = '-';
+                                                }
+
+                                                return (
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${badgeClass}`}>
+                                                        {icon} {Math.abs(changePct).toFixed(2)}%
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-3 translate-x-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all">

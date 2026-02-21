@@ -62,7 +62,12 @@ const Dashboard = () => {
         >
             <td className="py-3 font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">{stock.symbol}</td>
             <td className="py-3 font-medium dark:text-white whitespace-nowrap">Rs. {parseFloat(stock.last_price).toLocaleString()}</td>
-            <td className={`py-3 font-bold whitespace-nowrap text-right ${parseFloat(stock.change_percent) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            <td className={`py-3 font-bold whitespace-nowrap text-right ${parseFloat(stock.change_percent) > 0
+                    ? 'text-green-500'
+                    : parseFloat(stock.change_percent) < 0
+                        ? 'text-red-500'
+                        : 'text-blue-500'
+                }`}>
                 {parseFloat(stock.change || 0).toFixed(1)} ({parseFloat(stock.change_percent).toFixed(1)}%)
             </td>
         </tr>
