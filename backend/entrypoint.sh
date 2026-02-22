@@ -36,8 +36,8 @@ if not CustomUser.objects.filter(username='admin').exists():
 END
 
 # Seed LIVE data from NEPSE API on startup
-echo "Checking if database needs seeding..."
-python seed_live_data.py || echo "⚠️  Live data seeding failed - continuing anyway"
+echo "Checking and syncing company definitions, prices, and indices..."
+python manage.py sync_companies || echo "⚠️  Sync failed - continuing anyway"
 
 echo "Starting server..."
 exec python manage.py runserver 0.0.0.0:8000
