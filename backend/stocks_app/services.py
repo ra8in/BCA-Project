@@ -406,10 +406,175 @@ def get_cached_market_depth(symbol: str, client_id: str = 'anonymous') -> dict:
         return {'error': str(e)}
 
 
+def _format_today_price_data(s_symbol: str, stock_data: dict) -> dict:
+    """Format a single stock record from the today-price API response."""
+    ltp = safe_decimal(stock_data.get('closePrice') or stock_data.get('lastUpdatedPrice'))
+    prev_close = safe_decimal(stock_data.get('previousDayClosePrice') or stock_data.get('previousClose'))
+    
+    change = round(ltp - prev_close, 2) if ltp and prev_close else safe_decimal(0)
+    change_percent = round(float(change) / float(prev_close) * 100, 2) if prev_close else 0.0
+    
+    return {
+        'symbol': s_symbol,
+        'ltp': ltp,
+        'change': change,
+        'change_percent': change_percent,
+        'open': safe_decimal(stock_data.get('openPrice')),
+        'high': safe_decimal(stock_data.get('highPrice')),
+        'low': safe_decimal(stock_data.get('lowPrice')),
+        'volume': stock_data.get('totalTradedQuantity') or stock_data.get('totalTradeQuantity') or 0,
+        'previous_close': prev_close,
+        'turnover': safe_decimal(stock_data.get('totalTradedValue') or stock_data.get('totalTradeValue')),
+        'last_updated': stock_data.get('lastUpdatedTime') or stock_data.get('lastUpdatedDateTime'),
+        'source': 'live',
+    }
+
+
+def _sync_new_companies(new_symbols: set):
+    """
+    Called ONLY when a brand-new symbol is detected in today-price but not in DB.
+    Fetches the full company list from NEPSE, finds the new companies,
+    and stores them in the DB with all required fields (id, name, sector, etc.)
+
+    This is the ONLY place get_company_list() is called at runtime.
+    For initial setup, use: python manage.py sync_companies
+    """
+    from nepse_data_api.market import Nepse as FreshNepse
+    from stocks_app.models import Stock, Sector
+
+    logger.info(f"Syncing {len(new_symbols)} new company(s) to DB: {new_symbols}")
+    try:
+        nepse = FreshNepse(enable_cache=False)
+        companies = nepse.get_company_list()
+
+        # Build a lookup keyed by symbol for fast access
+        company_map = {c.get('symbol'): c for c in companies if c.get('symbol') in new_symbols}
+
+        for symbol in new_symbols:
+            company = company_map.get(symbol)
+            if not company:
+                logger.warning(f"New symbol {symbol} not found in company list response.")
+                continue
+
+            # Get or create sector
+            sector_name = company.get('sectorName') or 'Unknown'
+            sector, _ = Sector.objects.get_or_create(name=sector_name)
+
+            # Create the new stock record
+            Stock.objects.get_or_create(
+                symbol=symbol,
+                defaults={
+                    'name': company.get('companyName') or symbol,
+                    'nepse_security_id': company.get('id') or company.get('securityId'),
+                    'sector': sector,
+                    'is_active': True,
+                }
+            )
+            logger.info(f"New company added to DB: {symbol} — {company.get('companyName')}")
+
+    except Exception as e:
+        logger.error(f"Failed to sync new companies {new_symbols}: {e}")
+
+
+def _refresh_global_stock_cache() -> dict:
+    """
+    3-Phase global stock cache refresh:
+
+    Phase 1: Read active company symbols from DB (no API call — already stored).
+    Phase 2: Bulk-fetch all prices from 'today-price'. Cache every stock found.
+             Auto-detect new symbols not in DB → triggers a one-time sync for those.
+    Phase 3: For active DB symbols NOT in today-price → fall back to DB values.
+
+    get_company_list() is NEVER called here — only from sync_companies management
+    command (initial setup) or when a brand-new symbol is auto-detected.
+
+    Returns:
+        dict: {symbol -> formatted_data} for all active companies
+    """
+    from datetime import datetime
+    from nepse_data_api.market import Nepse as FreshNepse
+    from stocks_app.models import Stock
+
+    logger.info("Refreshing global stock cache (3-phase)...")
+    results = {}
+
+    # === PHASE 1: Read active symbols from DB (zero API calls) ===
+    active_symbols = set(Stock.objects.filter(is_active=True).values_list('symbol', flat=True))
+    logger.info(f"Phase 1: {len(active_symbols)} active companies from DB.")
+
+    # === PHASE 2: Bulk-fetch from today-price ===
+    today_price_symbols = set()
+    try:
+        phase2_nepse = FreshNepse(enable_cache=False)
+        url = f"{phase2_nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500"
+        payload_id = phase2_nepse._get_floorsheet_payload_id(0, datetime.now())
+        payload = {"id": payload_id}
+
+        response = phase2_nepse.session.post(url, headers=phase2_nepse._get_auth_headers(), json=payload)
+        response.raise_for_status()
+        data = response.json()
+
+        prices = []
+        if isinstance(data, dict) and 'content' in data:
+            prices = data['content']
+        elif isinstance(data, list):
+            prices = data
+
+        logger.info(f"Phase 2: today-price returned {len(prices)} stocks.")
+
+        ttl = _get_cache_ttl()
+        for stock_data in prices:
+            s_symbol = stock_data.get('symbol')
+            if not s_symbol:
+                continue
+            formatted = _format_today_price_data(s_symbol, stock_data)
+            cache.set(f"stock_price:{s_symbol}", formatted, ttl)
+            results[s_symbol] = formatted
+            today_price_symbols.add(s_symbol)
+
+        # Auto-detect new companies: symbol in today-price but NOT in DB
+        new_symbols = today_price_symbols - active_symbols
+        if new_symbols:
+            logger.warning(f"Detected {len(new_symbols)} new symbol(s) not in DB: {new_symbols}. Triggering company sync...")
+            _sync_new_companies(new_symbols)
+
+    except Exception as e:
+        logger.error(f"Phase 2 failed (today-price): {e}")
+
+    # === PHASE 3: DB fallback for active symbols not in today-price ===
+    missing_symbols = active_symbols - today_price_symbols
+    if missing_symbols:
+        logger.info(f"Phase 3: {len(missing_symbols)} active symbols not in today-price. Falling back to DB.")
+        ttl = _get_cache_ttl()
+        db_stocks = Stock.objects.filter(symbol__in=missing_symbols)
+        for stock in db_stocks:
+            s_symbol = stock.symbol
+            formatted = {
+                'symbol': s_symbol,
+                'ltp': stock.last_price,
+                'change': stock.change,
+                'change_percent': stock.change_percent,
+                'open': stock.open_price or stock.last_price,
+                'high': stock.high_price or stock.last_price,
+                'low': stock.low_price or stock.last_price,
+                'volume': stock.total_trade_quantity,
+                'previous_close': stock.previous_close,
+                'turnover': stock.total_traded_value,
+                'last_updated': None,
+                'source': 'database',
+            }
+            cache.set(f"stock_price:{s_symbol}", formatted, ttl)
+            results[s_symbol] = formatted
+
+    logger.info(f"Global cache refresh complete. {len(results)} stocks cached.")
+    return results
+
+
 def get_cached_stock_price(symbol: str, client_id: str = 'anonymous') -> dict:
     """
-    Get single stock price with 60-second cache and per-client throttling.
-    Falls back to database data when market is closed or API unavailable.
+    Get single stock price with clock-aligned cache and per-client throttling.
+    On cache miss, triggers a full global refresh (all active companies populated at once).
+    Falls back to database if API is unavailable.
     
     Args:
         symbol: Stock symbol (e.g., 'NABIL')
@@ -424,8 +589,8 @@ def get_cached_stock_price(symbol: str, client_id: str = 'anonymous') -> dict:
     cache_key = f"stock_price:{symbol}"
     throttle_key = f"throttle:stock_price:{client_id}:{symbol}"
     
-    # Check throttle (allow 5 requests per second to handle bursts/double-firing)
-    if _check_throttle(throttle_key, limit=5, period=1):
+    # Check throttle (allow requests after default delay to prevent abuse)
+    if _check_throttle(throttle_key):
         cached = cache.get(cache_key)
         if cached:
             logger.debug(f"Stock price throttled but returning cached data for {symbol}")
@@ -434,95 +599,20 @@ def get_cached_stock_price(symbol: str, client_id: str = 'anonymous') -> dict:
             logger.warning(f"Stock price throttled and no cache for {symbol}")
             return {'error': 'Please wait before requesting again', 'throttled': True}
     
-    # Try cache
+    # Try cache first
     cached = cache.get(cache_key)
     if cached is not None:
         logger.debug(f"Stock price cache HIT for {symbol}")
         _set_throttle(throttle_key)
         return cached
     
-    # Cache MISS - try API first, then fallback to DB
-    logger.debug(f"Stock price cache MISS for {symbol}. Fetching global market data...")
-    nepse = _get_nepse_client()
+    # Cache MISS — trigger global refresh (populates ALL active companies at once)
+    logger.info(f"Cache MISS for {symbol}. Triggering global refresh...")
+    all_results = _refresh_global_stock_cache()
     
-    result = None
+    result = all_results.get(symbol)
     
-    try:
-        # 1. Fetch ALL stocks using today-price API logic (based on stocks_ohlcv.py)
-        # We manually call the API to handle dictionary/list responses robustly
-        from datetime import datetime
-        
-        # Use a safe wrapper for get_today_price or manual call if needed
-        # Since nepse_data_api might have issues, we use a robust approach
-        try:
-            # Try standard method first
-            all_stocks = nepse.get_today_price()
-        except Exception:
-             # Fallback: manually construct request if library method fails
-            logger.warning("nepse.get_today_price() failed, trying manual request...")
-            url = f"{nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500"
-            payload_id = nepse._get_floorsheet_payload_id(0, datetime.now())
-            payload = {"id": payload_id}
-            response = nepse.session.post(url, headers=nepse._get_auth_headers(), json=payload)
-            response.raise_for_status()
-            data = response.json()
-            if isinstance(data, dict) and 'content' in data:
-                all_stocks = data['content']
-            elif isinstance(data, list):
-                all_stocks = data
-            else:
-                all_stocks = []
-
-        # If today-price is empty (e.g. market just opened or closed), we prefer to return empty or handle gracefully
-        # User requested to relying ONLY on today-price
-        if not all_stocks:
-             logger.warning("today-price returned empty.")
-
-        if all_stocks:
-            # Optimize: Cache EVERY stock found in the list
-            ttl = _get_cache_ttl()
-            
-            for stock_data in all_stocks:
-                s_symbol = stock_data.get('symbol')
-                if not s_symbol:
-                    continue
-                    
-                # Normalize data format
-                # During market hours, 'lastTradedPrice' is the key. 'closePrice' is often null.
-                ltp_value = stock_data.get('lastTradedPrice') or stock_data.get('closePrice')
-                
-                formatted_data = {
-                    'symbol': s_symbol,
-                    'ltp': safe_decimal(ltp_value),
-                    'change': safe_decimal(stock_data.get('lastTradedPrice', 0)) - safe_decimal(stock_data.get('previousClose', 0) or stock_data.get('previousDayClosePrice', 0)),
-                    'change_percent': safe_decimal(stock_data.get('percentageChange') or stock_data.get('perChange')),
-                    'open': safe_decimal(stock_data.get('openPrice')),
-                    'high': safe_decimal(stock_data.get('highPrice')),
-                    'low': safe_decimal(stock_data.get('lowPrice')),
-                    'volume': stock_data.get('totalTradeQuantity') or stock_data.get('totalTradedQuantity') or 0,
-                    'previous_close': safe_decimal(stock_data.get('previousClose') or stock_data.get('previousDayClosePrice')),
-                    'turnover': safe_decimal(stock_data.get('totalTradeValue') or stock_data.get('totalTradedValue')),
-                    'last_updated': stock_data.get('lastUpdatedDateTime'),
-                    'source': 'live',
-                }
-                
-                # Cache this specific stock
-                s_cache_key = f"stock_price:{s_symbol}"
-                cache.set(s_cache_key, formatted_data, ttl)
-                
-                # If this is the requested symbol, set it as result
-                if s_symbol == symbol:
-                    result = formatted_data
-            
-            # If we found our result, return it
-            if result:
-                 _set_throttle(throttle_key)
-                 return result
-
-    except Exception as e:
-        logger.warning(f"API fetch failed for {symbol}: {e}")
-    
-    # Fallback to database if API returned nothing or symbol not found in API list
+    # Final fallback if symbol wasn't in either today-price or active list
     if result is None:
         try:
             stock = Stock.objects.get(symbol=symbol)
@@ -538,19 +628,15 @@ def get_cached_stock_price(symbol: str, client_id: str = 'anonymous') -> dict:
                 'previous_close': stock.previous_close,
                 'turnover': stock.total_traded_value,
                 'last_updated': None,
-                'source': 'database',  # Indicates data is from DB, not live
+                'source': 'database',
             }
-            logger.info(f"Using DB fallback for {symbol} (market likely closed)")
+            logger.info(f"Final DB fallback for {symbol}")
+            cache.set(cache_key, result, _get_cache_ttl())
         except Stock.DoesNotExist:
             return {'error': f'Stock {symbol} not found'}
     
-    
-    # Cache the result with smart TTL
-    cache.set(cache_key, result, _get_cache_ttl())
     _set_throttle(throttle_key)
-    
     return result
-
 
 def get_cached_market_indices() -> list:
     """
