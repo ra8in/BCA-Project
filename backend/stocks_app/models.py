@@ -4,6 +4,7 @@ from django.db import models
 class Sector(models.Model):
     """Category for stocks - e.g., 'Commercial Banks', 'Hydro Power'"""
     name = models.CharField(max_length=100, unique=True)
+    nepse_id = models.IntegerField(null=True, blank=True, help_text="NEPSE Sub-Index ID for this sector")
     description = models.TextField(null=True, blank=True)
     
     def __str__(self):
@@ -14,7 +15,8 @@ class SubIndex(models.Model):
     """Sectoral Sub-Index - e.g., 'Banking' tracks 'Commercial Banks' sector"""
     name = models.CharField(max_length=100)  # e.g., "Banking"
     symbol = models.CharField(max_length=20, unique=True)  # e.g., "BANKING"
-    sector = models.OneToOneField(Sector, on_delete=models.CASCADE, related_name='subindex')
+    nepse_id = models.IntegerField(null=True, blank=True, help_text="NEPSE API ID")
+    sector = models.OneToOneField(Sector, on_delete=models.SET_NULL, related_name='subindex', null=True, blank=True)
     current_value = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     change = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     change_percent = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -28,6 +30,7 @@ class MarketIndex(models.Model):
     """Main Market Index - e.g., 'NEPSE', 'Sensitive', 'Float'"""
     name = models.CharField(max_length=100)
     symbol = models.CharField(max_length=20, unique=True)
+    nepse_id = models.IntegerField(null=True, blank=True, help_text="NEPSE API ID")
     current_value = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     change = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     change_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)

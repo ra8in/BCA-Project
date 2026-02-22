@@ -18,7 +18,7 @@ class SectorSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Sector
-        fields = ['id', 'name', 'stock_count', 'subindex']
+        fields = ['id', 'nepse_id', 'name', 'stock_count', 'subindex']
 
 
 class MarketIndexSerializer(serializers.ModelSerializer):

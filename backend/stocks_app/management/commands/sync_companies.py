@@ -68,6 +68,10 @@ class Command(BaseCommand):
         else:
             self.stdout.write("\n=== STEP 3: All active stocks had data in today-price. No profiles needed. ===")
 
+        # === STEP 4: Fetch and sync indices ===
+        self.stdout.write("\n=== STEP 4: Fetching market indices ===")
+        self._sync_indices(dry_run)
+
         self.stdout.write(self.style.SUCCESS("\nSync complete!"))
 
     def _sync_company_list(self, dry_run):
@@ -265,8 +269,8 @@ class Command(BaseCommand):
 
                         ltp = stock.last_price
                         prev = stock.previous_close
-                        stock.change = round(ltp - prev, 2) if ltp and prev else Decimal('0')
-                        stock.change_percent = round(float(stock.change) / float(prev) * 100, 2) if prev else 0
+                        stock.change = round(ltp - prev, 2) if ltp > 0 and prev > 0 else Decimal('0')
+                        stock.change_percent = round(float(stock.change) / float(prev) * 100, 2) if ltp > 0 and prev > 0 else 0
 
                         stock.save()
                     except Stock.DoesNotExist:
@@ -423,9 +427,9 @@ class Command(BaseCommand):
                     stock.low_price = Decimal(str(mcs.get('lowPrice') or 0))
                     stock.total_trade_quantity = mcs.get('totalTradeQuantity') or 0
 
-                    stock.change = round(ltp - prev_close, 2) if ltp and prev_close else Decimal('0')
+                    stock.change = round(ltp - prev_close, 2) if ltp > 0 and prev_close > 0 else Decimal('0')
                     stock.change_percent = (
-                        round(float(stock.change) / float(prev_close) * 100, 2) if prev_close else 0
+                        round(float(stock.change) / float(prev_close) * 100, 2) if ltp > 0 and prev_close > 0 else Decimal('0')
                     )
 
                     stock.save()
@@ -437,3 +441,134 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.ERROR(f"  [STILL FAILED] {symbol}: {e}"))
 
         self.stdout.write(self.style.SUCCESS(f"\nStep 3 done. Fetched: {fetched}, Failed/Skipped: {failed}"))
+    # Static mapping: NEPSE sub-index name → NEPSE sector name
+    # NEPSE has exactly 14 sub-indices. This mapping never changes.
+    SUB_INDEX_TO_SECTOR = {
+        'Banking SubIndex':                 'Commercial Banks',
+        'Development Bank Index':           'Development Banks',
+        'Finance Index':                    'Finance',
+        'Hotels And Tourism Index':         'Hotels And Tourism',
+        'HydroPower Index':                 'Hydro Power',
+        'Investment Index':                 'Investment',
+        'Life Insurance':                   'Life Insurance',
+        'Manufacturing And Processing':     'Manufacturing And Processing',
+        'Micro Finance Index':              'Microfinance',
+        'Microfinance Index':               'Microfinance',
+        'Mutual Fund':                      'Mutual Fund',
+        'Non Life Insurance':               'Non Life Insurance',
+        'Others Index':                     'Others',
+        'Trading Index':                    'Tradings',
+        'Corporate Debenture':              'Non-Convertible Debenture',
+    }
+
+    def _sync_indices(self, dry_run):
+        """
+        Step 4: Fetch Main Indices and Sub-Indices from NEPSE.
+        
+        One-time setup: Sets nepse_id, sector, name, symbol + initial values.
+        Live polling (services.py) only updates current_value/change/change_percent.
+        
+        Uses a hardcoded SUB_INDEX_TO_SECTOR mapping for the ~14 fixed NEPSE sectors.
+        """
+        from stocks_app.models import MarketIndex, SubIndex, Sector
+        from decimal import Decimal
+
+        if dry_run:
+            self.stdout.write("  [DRY] Would fetch and update market indices and sub-indices.")
+            return
+
+        try:
+            from nepse_data_api.market import Nepse
+            nepse = Nepse(enable_cache=False)
+
+            # --- Clean up stale duplicates from earlier failed syncs ---
+            stale_mi = MarketIndex.objects.filter(nepse_id__isnull=True).delete()[0]
+            stale_si = SubIndex.objects.filter(nepse_id__isnull=True).delete()[0]
+            if stale_mi or stale_si:
+                self.stdout.write(self.style.WARNING(
+                    f"  Cleaned up stale records: {stale_mi} MarketIndex, {stale_si} SubIndex"
+                ))
+
+            # === 1. Main Indices (NEPSE, Sensitive, Float, Sensitive Float) ===
+            main_indices = nepse.get_nepse_index()
+            created_main = updated_main = 0
+
+            for item in main_indices:
+                name = item.get('index')
+                if not name:
+                    continue
+                nepse_id = int(item['id']) if item.get('id') else None
+                symbol = name.upper()[:20]
+
+                idx, created = MarketIndex.objects.update_or_create(
+                    nepse_id=nepse_id,
+                    defaults={
+                        'name': name,
+                        'symbol': symbol,
+                        'current_value': Decimal(str(item.get('currentValue') or 0)),
+                        'change': Decimal(str(item.get('change') or 0)),
+                        'change_percent': Decimal(str(item.get('perChange') or 0))
+                    }
+                )
+                if created: created_main += 1
+                else: updated_main += 1
+
+            self.stdout.write(self.style.SUCCESS(
+                f"  Main Indices: Created {created_main}, Updated {updated_main}"
+            ))
+
+            # === 2. Sub-Indices (14 sectors) ===
+            sub_indices = nepse.get_sub_indices()
+            created_sub = updated_sub = skipped = 0
+
+            for item in sub_indices:
+                name = item.get('index')
+                if not name:
+                    continue
+                nepse_id = int(item['id']) if item.get('id') else None
+                symbol = name.upper()[:20]
+
+                # Deterministic sector lookup via hardcoded map
+                sector_name = self.SUB_INDEX_TO_SECTOR.get(name)
+                if not sector_name:
+                    self.stdout.write(self.style.WARNING(
+                        f"  [UNMAPPED] Sub-index '{name}' not in mapping — skipped. "
+                        f"Add it to SUB_INDEX_TO_SECTOR."
+                    ))
+                    skipped += 1
+                    continue
+
+                sector = Sector.objects.filter(name=sector_name).first()
+                if not sector:
+                    self.stdout.write(self.style.WARNING(
+                        f"  [NO SECTOR] '{sector_name}' not in DB for sub-index '{name}' — skipped."
+                    ))
+                    skipped += 1
+                    continue
+                
+                # Update the Sector's nepse_id to match the SubIndex's nepse_id
+                if sector.nepse_id != nepse_id:
+                    sector.nepse_id = nepse_id
+                    sector.save(update_fields=['nepse_id'])
+
+                sub, created = SubIndex.objects.update_or_create(
+                    nepse_id=nepse_id,
+                    defaults={
+                        'name': name,
+                        'symbol': symbol,
+                        'sector': sector,
+                        'current_value': Decimal(str(item.get('currentValue') or 0)),
+                        'change': Decimal(str(item.get('change') or 0)),
+                        'change_percent': Decimal(str(item.get('perChange') or 0))
+                    }
+                )
+                if created: created_sub += 1
+                else: updated_sub += 1
+
+            self.stdout.write(self.style.SUCCESS(
+                f"  Sub-Indices: Created {created_sub}, Updated {updated_sub}, Skipped {skipped}"
+            ))
+
+        except Exception as e:
+            self.stderr.write(self.style.ERROR(f"Failed to fetch indices: {e}"))
+

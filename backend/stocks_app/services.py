@@ -311,16 +311,27 @@ def fill_missing_stock_prices():
 
             if sec_data:
                 # Update Stock directly
-                stock.last_price = safe_decimal(sec_data.get('lastTradedPrice'))
+                ltp = safe_decimal(sec_data.get('lastTradedPrice') or sec_data.get('closePrice'))
+                prev_close = safe_decimal(sec_data.get('previousClose'))
+                
+                stock.last_price = ltp
                 stock.open_price = safe_decimal(sec_data.get('openPrice'))
                 stock.high_price = safe_decimal(sec_data.get('highPrice'))
                 stock.low_price = safe_decimal(sec_data.get('lowPrice'))
-                stock.previous_close = safe_decimal(sec_data.get('previousClose'))
+                stock.previous_close = prev_close
                 stock.total_trade_quantity = 0 # Assume 0 if we are here (not in today-price)
+                
+                # Fix change calculation for dormant stocks
+                if ltp > 0 and prev_close > 0:
+                    stock.change = round(ltp - prev_close, 2)
+                    stock.change_percent = round((stock.change / prev_close) * 100, 2)
+                else:
+                    stock.change = Decimal('0')
+                    stock.change_percent = Decimal('0')
                 
                 stock.save(update_fields=[
                     'last_price', 'open_price', 'high_price', 'low_price', 
-                    'previous_close', 'total_trade_quantity'
+                    'previous_close', 'total_trade_quantity', 'change', 'change_percent'
                 ])
                 updated += 1
                 
@@ -656,25 +667,30 @@ def get_cached_market_indices() -> list:
     nepse = _get_nepse_client()
     
     try:
-        # Fetch live data
         indices_data = nepse.get_market_index()
         
-        # Update Database
+        # Live polling: only update values.
+        # nepse_id, name, symbol are set once by sync_companies.
         updated_indices = []
         for item in indices_data:
-            idx, _ = MarketIndex.objects.update_or_create(
-                symbol=item['index'],
-                defaults={
-                    'name': item['index'],
-                    'current_value': safe_decimal(item['currentValue']),
-                    'change': safe_decimal(item['change']),
-                    'change_percent': safe_decimal(item['perChange'])
-                }
-            )
+            nepse_id = int(item['id']) if item.get('id') else None
+            if not nepse_id:
+                continue
+            try:
+                idx = MarketIndex.objects.get(nepse_id=nepse_id)
+                idx.current_value = safe_decimal(item['currentValue'])
+                idx.change = safe_decimal(item['change'])
+                idx.change_percent = safe_decimal(item['perChange'])
+                idx.save(update_fields=['current_value', 'change', 'change_percent', 'timestamp'])
+            except MarketIndex.DoesNotExist:
+                logger.warning(f"MarketIndex nepse_id={nepse_id} not in DB; run sync_companies.")
+                continue
+
             updated_indices.append({
                 'id': idx.id,
                 'name': idx.name,
                 'symbol': idx.symbol,
+                'nepse_id': idx.nepse_id,
                 'current_value': idx.current_value,
                 'change': idx.change,
                 'change_percent': idx.change_percent
@@ -699,7 +715,8 @@ def get_cached_market_indices() -> list:
 def get_cached_sub_indices() -> list:
     """
     Get live sub-indices (sectors) with smart caching.
-    Fetches from NEPSE API if cache miss/stale, updates DB, and returns data.
+    Fetches from NEPSE API if cache miss/stale, updates DB values only.
+    nepse_id, name, symbol, sector are set once by sync_companies.
     """
     from stocks_app.models import SubIndex, Sector
     
@@ -714,29 +731,29 @@ def get_cached_sub_indices() -> list:
     nepse = _get_nepse_client()
     
     try:
-        # Fetch live data
         sub_indices_data = nepse.get_sub_indices()
         
-        # Update Database
+        # Live polling: ONLY update value fields.
         updated_subindices = []
         for item in sub_indices_data:
-            # Find sector (optional, just for linkage if needed)
-            sector = Sector.objects.filter(name__iexact=item['index']).first()
+            nepse_id = int(item['id']) if item.get('id') else None
+            if not nepse_id:
+                continue
+            try:
+                sub = SubIndex.objects.get(nepse_id=nepse_id)
+                sub.current_value = safe_decimal(item['currentValue'])
+                sub.change = safe_decimal(item['change'])
+                sub.change_percent = safe_decimal(item['perChange'])
+                sub.save(update_fields=['current_value', 'change', 'change_percent', 'timestamp'])
+            except SubIndex.DoesNotExist:
+                logger.warning(f"SubIndex nepse_id={nepse_id} not in DB; run sync_companies.")
+                continue
             
-            sub, _ = SubIndex.objects.update_or_create(
-                symbol=item['index'],
-                defaults={
-                    'name': item['index'],
-                    'current_value': safe_decimal(item['currentValue']),
-                    'change': safe_decimal(item['change']),
-                    'change_percent': safe_decimal(item['perChange']),
-                    'sector': sector
-                }
-            )
             updated_subindices.append({
                 'id': sub.id,
                 'name': sub.name,
                 'symbol': sub.symbol,
+                'nepse_id': sub.nepse_id,
                 'current_value': sub.current_value,
                 'change': sub.change,
                 'change_percent': sub.change_percent,
