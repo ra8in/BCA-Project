@@ -18,5 +18,8 @@ COPY . .
 # Expose Django development server port
 EXPOSE 8000
 
-# Entry point script will handle migrations + seeding
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Make entrypoint script executable
+RUN chmod +x /app/entrypoint.sh
+
+# Entry point script handles migrations, superuser, and live NEPSE API data syncing
+ENTRYPOINT ["/app/entrypoint.sh"]
