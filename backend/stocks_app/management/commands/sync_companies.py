@@ -103,6 +103,8 @@ class Command(BaseCommand):
 
         def get_sector(symbol, sec_name, security_id):
             """Resolve sector via symbol → prefix → name matching, with API profile fallback."""
+            nonlocal nepse
+            
             # A. Exact symbol match
             sector = symbol_to_sector.get(symbol)
             # B. Symbol prefix (NABILP → NABIL)
@@ -125,18 +127,28 @@ class Command(BaseCommand):
                             
             # D. Dynamic API Profile Fallback (The robust method)
             if not sector and security_id and not dry_run:
-                try:
-                    import time
-                    time.sleep(0.5)  # Rate limit protection for NEPSE API
-                    details = nepse.get_security_details(security_id)
-                    if details and details.get('securityData'):
-                        sector = details['securityData'].get('sectorName')
-                        if sector:
-                            self.stdout.write(f"  [Profile Fallback] Resolved {symbol} sector: {sector}")
-                except Exception as e:
-                    self.stdout.write(self.style.WARNING(f"  [Profile Fallback Failed] {symbol}: {e}"))
+                import time
+                for attempt in range(2):
+                    try:
+                        time.sleep(0.1)  # Rate limit protection for NEPSE API
+                        details = nepse.get_security_details(security_id)
+                        
+                        # Expected structure is details['securityData']['sector']
+                        if details and details.get('securityData'):
+                            sector = details['securityData'].get('sector')
+                            
+                            if sector:
+                                self.stdout.write(f"  [Profile Fallback] Resolved {symbol} sector: {sector}")
+                        break
+                    except Exception as e:
+                        if attempt == 0:
+                            # Token likely expired, get a fresh one
+                            from nepse_data_api.market import Nepse
+                            nepse = Nepse(enable_cache=False)
+                        else:
+                            self.stdout.write(self.style.WARNING(f"  [Profile Fallback Failed] {symbol}: {e}"))
 
-            return sector or 'Unknown'
+            return sector
 
         # Filter active securities only
         active = [s for s in securities if s.get('activeStatus') == 'A']
@@ -159,10 +171,14 @@ class Command(BaseCommand):
                 company_map[symbol] = s
 
                 if dry_run:
-                    self.stdout.write(f"  [DRY] {symbol:12} | {sec_name[:40]:<40} | {sector_name}")
+                    self.stdout.write(f"  [DRY] {symbol:12} | {sec_name[:40]:<40} | {sector_name or 'None'}")
                     continue
 
-                sector, _ = Sector.objects.get_or_create(name=sector_name)
+                if sector_name:
+                    sector, _ = Sector.objects.get_or_create(name=sector_name)
+                else:
+                    sector = None
+                    
                 stock, was_created = Stock.objects.get_or_create(
                     symbol=symbol,
                     defaults={
