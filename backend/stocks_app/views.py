@@ -25,11 +25,29 @@ class StockSearchView(APIView):
 class StockDetailView(APIView):
     def get(self, request, symbol):
         try:
-            stock = Stock.objects.get(symbol__iexact=symbol)
-            serializer = StockSerializer(stock)
-            return Response(serializer.data)
+            stock = Stock.objects.select_related('sector').get(symbol__iexact=symbol)
         except Stock.DoesNotExist:
             return Response({"error": "Stock not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Try to enrich with live cache data
+        from stocks_app.services import get_cached_stock_price
+        client_id = f"user_{request.user.id}" if request.user.is_authenticated else f"ip_{request.META.get('REMOTE_ADDR', 'unknown')}"
+        live = get_cached_stock_price(symbol.upper(), client_id)
+        
+        # Build response with static metadata + live prices
+        data = StockSerializer(stock).data
+        if live and not live.get('error') and not live.get('throttled'):
+            data['last_price'] = live.get('ltp', data['last_price'])
+            data['change'] = live.get('change', data['change'])
+            data['change_percent'] = live.get('change_percent', data['change_percent'])
+            data['open_price'] = live.get('open', data.get('open_price'))
+            data['high_price'] = live.get('high', data.get('high_price'))
+            data['low_price'] = live.get('low', data.get('low_price'))
+            data['total_trade_quantity'] = live.get('volume', data.get('total_trade_quantity'))
+            data['total_traded_value'] = live.get('turnover', data.get('total_traded_value'))
+            data['previous_close'] = live.get('previous_close', data.get('previous_close'))
+        
+        return Response(data)
 
 
 class StockListView(APIView):
@@ -46,14 +64,22 @@ class StockListView(APIView):
 
 
 class SectorListView(APIView):
-    """List all sectors with stock count and nested subindex data"""
+    """List all sectors with stock count and nested subindex data (cached 1 hour)"""
     def get(self, request):
+        from django.core.cache import cache as django_cache
+        
+        cached = django_cache.get('sector_list_full')
+        if cached is not None:
+            return Response(cached)
+        
         sectors = Sector.objects.prefetch_related('subindex').annotate(
             stock_count=Count('stocks')
         ).order_by('name')
         
         serializer = SectorSerializer(sectors, many=True)
-        return Response(serializer.data)
+        data = serializer.data
+        django_cache.set('sector_list_full', data, 3600)  # 1 hour TTL
+        return Response(data)
 
 
 class SubIndexListView(APIView):

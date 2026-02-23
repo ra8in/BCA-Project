@@ -26,18 +26,16 @@ THROTTLE_DELAY = 2            # 2 seconds minimum between on-demand requests per
 
 
 def _get_cache_ttl():
-    """Get the appropriate cache TTL based on market status."""
-    from stocks_app.market_hours import is_market_open
+    """Get the appropriate cache TTL based on market session state machine."""
+    from stocks_app.market_hours import get_market_state
     from datetime import datetime
     
-    is_open = is_market_open()
+    state = get_market_state()
     
-    if is_open:
+    if state == "OPEN":
         # Align cache expiry to the start of the next minute (HH:MM:00)
-        # This ensures we don't fetch API multiple times within the same minute bucket
         now = datetime.now()
         seconds_remaining = 60 - now.second
-        # Minimum safe TTL is 1 second
         return max(1, seconds_remaining)
         
     return MARKET_CLOSED_TTL
@@ -417,10 +415,21 @@ def get_cached_market_depth(symbol: str, client_id: str = 'anonymous') -> dict:
         return {'error': str(e)}
 
 
-def _format_today_price_data(s_symbol: str, stock_data: dict) -> dict:
-    """Format a single stock record from the today-price API response."""
+def _format_today_price_data(s_symbol: str, stock_data: dict, prev_close_override=None) -> dict:
+    """Format a single stock record from the today-price API response.
+    
+    Args:
+        prev_close_override: If provided, use this as previous_close instead of
+                             the unreliable NEPSE previousDayClosePrice field.
+                             This should come from our own StockPrice.close table.
+    """
     ltp = safe_decimal(stock_data.get('closePrice') or stock_data.get('lastUpdatedPrice'))
-    prev_close = safe_decimal(stock_data.get('previousDayClosePrice') or stock_data.get('previousClose'))
+    
+    # Priority: our own DB close > NEPSE API field
+    if prev_close_override is not None:
+        prev_close = safe_decimal(prev_close_override)
+    else:
+        prev_close = safe_decimal(stock_data.get('previousDayClosePrice') or stock_data.get('previousClose'))
     
     change = round(ltp - prev_close, 2) if ltp and prev_close else safe_decimal(0)
     change_percent = round(float(change) / float(prev_close) * 100, 2) if prev_close else 0.0
@@ -509,9 +518,37 @@ def _refresh_global_stock_cache() -> dict:
     logger.info("Refreshing global stock cache (3-phase)...")
     results = {}
 
+    # === STATE GATE: If market is CLOSED, skip all NEPSE API calls ===
+    from stocks_app.market_hours import get_market_state
+    market_state = get_market_state()
+    
     # === PHASE 1: Read active symbols from DB (zero API calls) ===
     active_symbols = set(Stock.objects.filter(is_active=True).values_list('symbol', flat=True))
     logger.info(f"Phase 1: {len(active_symbols)} active companies from DB.")
+    
+    if market_state == "CLOSED":
+        logger.info("Market is CLOSED. Skipping NEPSE API calls — serving DB prices.")
+        ttl = MARKET_CLOSED_TTL
+        db_stocks = Stock.objects.filter(is_active=True)
+        for stock in db_stocks:
+            formatted = {
+                'symbol': stock.symbol,
+                'ltp': stock.last_price,
+                'change': stock.change,
+                'change_percent': stock.change_percent,
+                'open': stock.open_price or stock.last_price,
+                'high': stock.high_price or stock.last_price,
+                'low': stock.low_price or stock.last_price,
+                'volume': stock.total_trade_quantity,
+                'previous_close': stock.previous_close,
+                'turnover': stock.total_traded_value,
+                'last_updated': None,
+                'source': 'database',
+            }
+            cache.set(f"stock_price:{stock.symbol}", formatted, ttl)
+            results[stock.symbol] = formatted
+        logger.info(f"CLOSED mode: Cached {len(results)} stocks from DB with {ttl}s TTL.")
+        return results
 
     # === PHASE 2: Bulk-fetch from today-price ===
     today_price_symbols = set()
@@ -533,12 +570,35 @@ def _refresh_global_stock_cache() -> dict:
 
         logger.info(f"Phase 2: today-price returned {len(prices)} stocks.")
 
+        # Build previous_close map from our own StockPrice table (source of truth)
+        from stocks_app.models import StockPrice
+        from django.db.models import Max, Subquery, OuterRef
+        
+        prev_close_map = {}  # {symbol: close_price}
+        # Get the latest StockPrice close for each active stock
+        latest_prices = StockPrice.objects.filter(
+            stock__is_active=True
+        ).values('stock__symbol').annotate(
+            latest_date=Max('timestamp')
+        )
+        for entry in latest_prices:
+            sym = entry['stock__symbol']
+            latest = StockPrice.objects.filter(
+                stock__symbol=sym,
+                timestamp=entry['latest_date']
+            ).values_list('close', flat=True).first()
+            if latest:
+                prev_close_map[sym] = latest
+        
+        if prev_close_map:
+            logger.info(f"Phase 2: Built prev_close map from DB for {len(prev_close_map)} stocks.")
+
         ttl = _get_cache_ttl()
         for stock_data in prices:
             s_symbol = stock_data.get('symbol')
             if not s_symbol:
                 continue
-            formatted = _format_today_price_data(s_symbol, stock_data)
+            formatted = _format_today_price_data(s_symbol, stock_data, prev_close_override=prev_close_map.get(s_symbol))
             cache.set(f"stock_price:{s_symbol}", formatted, ttl)
             results[s_symbol] = formatted
             today_price_symbols.add(s_symbol)
@@ -648,6 +708,70 @@ def get_cached_stock_price(symbol: str, client_id: str = 'anonymous') -> dict:
     
     _set_throttle(throttle_key)
     return result
+
+
+def get_all_cached_stock_prices(client_id: str = 'anonymous') -> list:
+    """
+    Get all active stock prices instantly from the global cache.
+    If the cache is expired, triggers a single backend refresh.
+    Maps cache keys to StockSerializer-compatible format for the frontend.
+    Returns:
+        List of dictionaries matching StockSerializer JSON contract.
+    """
+    from stocks_app.models import Stock
+    
+    throttle_key = f"throttle:stock_prices_all:{client_id}"
+    
+    # Check throttle to prevent abuse
+    if _check_throttle(throttle_key):
+        cached_result = cache.get('all_stock_prices_mapped')
+        if cached_result:
+            return cached_result
+        # Still throttled but no cached result — let it through
+    
+    _set_throttle(throttle_key)
+
+    # Fetch fast metadata mapping from DB
+    meta_qs = Stock.objects.filter(is_active=True).values('id', 'symbol', 'name', 'sector_id', 'sector__name')
+    stock_meta = {m['symbol']: m for m in meta_qs}
+    active_symbols = list(stock_meta.keys())
+    
+    cache_keys = [f"stock_price:{sym}" for sym in active_symbols]
+    cached_data = cache.get_many(cache_keys)
+    
+    # If cache is missing ANY active stock (or completely expired)
+    if len(cached_data) < len(active_symbols):
+        logger.info(f"Global cache missing symbols. Triggering global refresh from get_all_cached_stock_prices...")
+        raw_results = _refresh_global_stock_cache()
+    else:
+        raw_results = {k.split(':')[1]: v for k, v in cached_data.items()}
+        
+    # Map raw cache keys into StockSerializer contract
+    mapped_results = []
+    for sym, m in stock_meta.items():
+        c = raw_results.get(sym, {})
+        mapped_results.append({
+            'id': m['id'],
+            'symbol': sym,
+            'name': m['name'],
+            'sector': m['sector_id'],
+            'sector_name': m['sector__name'],
+            'last_price': c.get('ltp', 0),
+            'change': c.get('change', 0),
+            'change_percent': c.get('change_percent', 0),
+            'previous_close': c.get('previous_close', 0),
+            'open_price': c.get('open', 0),
+            'high_price': c.get('high', 0),
+            'low_price': c.get('low', 0),
+            'total_trade_quantity': c.get('volume', 0),
+            'total_traded_value': c.get('turnover', 0),
+            'is_active': True
+        })
+    
+    # Cache the mapped result briefly (same TTL as stock prices)
+    cache.set('all_stock_prices_mapped', mapped_results, _get_cache_ttl())
+    return mapped_results
+
 
 def get_cached_market_indices() -> list:
     """
