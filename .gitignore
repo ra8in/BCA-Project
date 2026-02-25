@@ -45,6 +45,7 @@ build/
 .coverage
 htmlcov/
 .pytest_cache/
+.obsidian/
 
 # Logs
 logs/

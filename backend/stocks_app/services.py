@@ -521,12 +521,11 @@ def _sync_new_companies(new_symbols: set):
     This is the ONLY place get_company_list() is called at runtime.
     For initial setup, use: python manage.py sync_companies
     """
-    from nepse_data_api.market import Nepse as FreshNepse
     from stocks_app.models import Stock, Sector
 
     logger.info(f"Syncing {len(new_symbols)} new company(s) to DB: {new_symbols}")
     try:
-        nepse = FreshNepse(enable_cache=False)
+        nepse = _get_nepse_client()  # Reuse singleton — no fresh auth roundtrip
         companies = nepse.get_company_list()
 
         # Build a lookup keyed by symbol for fast access
@@ -574,7 +573,6 @@ def _refresh_global_stock_cache() -> dict:
         dict: {symbol -> formatted_data} for all active companies
     """
     from datetime import datetime
-    from nepse_data_api.market import Nepse as FreshNepse
     from stocks_app.models import Stock
 
     logger.info("Refreshing global stock cache (3-phase)...")
@@ -613,9 +611,10 @@ def _refresh_global_stock_cache() -> dict:
         return results
 
     # === PHASE 2: Bulk-fetch from today-price ===
+    # Reuse the singleton client — avoids re-authenticating on every cache miss
     today_price_symbols = set()
     try:
-        phase2_nepse = FreshNepse(enable_cache=False)
+        phase2_nepse = _get_nepse_client()
         url = f"{phase2_nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500"
         payload_id = phase2_nepse._get_floorsheet_payload_id(0, datetime.now())
         payload = {"id": payload_id}
