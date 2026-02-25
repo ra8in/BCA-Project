@@ -161,23 +161,26 @@ USE_TZ = True
 
 
 # Cache Configuration
-# Market data caching to prevent API rate limits
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'nepse-market-data',
-        'OPTIONS': {
-            'MAX_ENTRIES': 1000,
+# Uses Redis in Docker (REDIS_URL set), falls back to in-memory for local dev
+REDIS_URL = os.environ.get('REDIS_URL')
+
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
         }
     }
-}
-# For production with Docker/Redis:
-# CACHES = {
-#     'default': {
-#         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-#         'LOCATION': 'redis://redis:6379/0',
-#     }
-# }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'nepse-market-data',
+            'OPTIONS': {
+                'MAX_ENTRIES': 1000,
+            }
+        }
+    }
 
 
 # Static files (CSS, JavaScript, Images)

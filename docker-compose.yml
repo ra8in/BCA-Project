@@ -1,20 +1,28 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
     environment:
       POSTGRES_DB: paper_trading_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: paper_trading
+      POSTGRES_PASSWORD: paper_trading_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U paper_trading -d paper_trading_db"]
       interval: 5s
       timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
   backend:
@@ -23,14 +31,18 @@ services:
     command: bash /app/entrypoint.sh
     volumes:
       - ./backend:/app
+      - ./frontend/dist:/frontend/dist
     ports:
       - "8000:8000"
     environment:
       - DEBUG=True
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/paper_trading_db
+      - SECRET_KEY=django-insecure-docker-dev-key-change-in-production
+      - DATABASE_URL=postgres://paper_trading:paper_trading_password@db:5432/paper_trading_db
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:
@@ -42,7 +54,6 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:8000
       - PROXY_TARGET=http://backend:8000
     depends_on:
       - backend

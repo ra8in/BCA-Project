@@ -42,6 +42,9 @@ const Trading = () => {
     const [loadingOrders, setLoadingOrders] = useState(false);
     const [ordersTab, setOrdersTab] = useState('active'); // 'active' or 'history'
 
+    // Market Depth State
+    const [marketDepth, setMarketDepth] = useState(null);
+
     // Filtering State
     const [filterType, setFilterType] = useState('all'); // 'all', 'buy', 'sell'
     const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'executed', 'pending', 'cancelled'
@@ -140,7 +143,6 @@ const Trading = () => {
 
     const [editingOrder, setEditingOrder] = useState(null);
     const [isMarketOpen, setIsMarketOpen] = useState(false);
-    const [refreshDepthTrigger, setRefreshDepthTrigger] = useState(0);
 
     // Market Status Check (Clock-Aligned)
     useEffect(() => {
@@ -222,6 +224,41 @@ const Trading = () => {
         };
         init();
     }, [routeSymbol, navigate, location.state]);
+    // Market Depth Polling
+    useEffect(() => {
+        let depthInterval;
+
+        const fetchDepth = async () => {
+            if (!routeSymbol) return;
+            try {
+                const data = await stockService.getMarketDepth(routeSymbol);
+                if (data && !data.error) {
+                    setMarketDepth(data);
+                } else if (data && data.error) {
+                    // Handle market closed or not found
+                    setMarketDepth(null);
+                }
+            } catch (err) {
+                console.error("Failed to fetch market depth for trading", err);
+            }
+        };
+
+        if (routeSymbol) {
+            // Fetch immediately
+            fetchDepth();
+
+            // Poll every 5s if market is open
+            if (isMarketOpen) {
+                depthInterval = setInterval(fetchDepth, 5000);
+            }
+        } else {
+            setMarketDepth(null);
+        }
+
+        return () => {
+            if (depthInterval) clearInterval(depthInterval);
+        };
+    }, [routeSymbol, isMarketOpen]);
 
 
 
@@ -280,19 +317,6 @@ const Trading = () => {
 
     // Use real stock price for LTP, fallback to order price only if no stock data (shouldn't happen)
     const LTP = selectedStockData?.last_price ? parseFloat(selectedStockData.last_price) : (order.price ? parseFloat(order.price) : 0);
-
-    // Mock Depth based on real LTP
-    const buyDepth = React.useMemo(() => Array.from({ length: 5 }, (_, i) => ({
-        qty: Math.floor(Math.random() * 500) + 10,
-        price: (LTP - ((i + 1) * 0.1)).toFixed(2),
-        orders: Math.floor(Math.random() * 5) + 1
-    })), [LTP, refreshDepthTrigger]);
-
-    const sellDepth = React.useMemo(() => Array.from({ length: 5 }, (_, i) => ({
-        qty: Math.floor(Math.random() * 500) + 10,
-        price: (LTP + ((i + 1) * 0.1)).toFixed(2),
-        orders: Math.floor(Math.random() * 5) + 1
-    })), [LTP, refreshDepthTrigger]);
 
     // Helper: Calculate Estimated Net Amount (Sync)
     const calculateEstimatedNet = (order) => {
@@ -503,24 +527,19 @@ const Trading = () => {
 
                     {/* Market Depth Table */}
                     <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                <h3 className="font-bold text-gray-700 dark:text-gray-300">Market Depth</h3>
-                                {isMarketOpen ? (
-                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-[10px] font-bold uppercase animate-pulse">
-                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                                        LIVE
-                                    </span>
-                                ) : (
+                        <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-bold text-gray-900 dark:text-white">Market Depth</h3>
+                                {!isMarketOpen && (
                                     <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full uppercase">CLOSED</span>
                                 )}
                             </div>
                             <button
-                                onClick={() => setRefreshDepthTrigger(prev => prev + 1)}
+                                onClick={() => { /* Auto-polls every 5s */ }}
                                 className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg transition-colors text-gray-500"
-                                title="Refresh Depth"
+                                title="Auto-refreshing every 5s"
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                             </button>
@@ -530,37 +549,45 @@ const Trading = () => {
                                 Market Closed, Depth unavailable
                             </div>
                         ) : order.symbol ? (
-                            <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700">
+                            <div className="grid grid-cols-2 text-xs divide-x divide-gray-100 dark:divide-gray-700">
                                 {/* BUY SIDE */}
-                                <div>
-                                    <div className="grid grid-cols-3 gap-2 p-2 px-4 text-xs font-bold text-gray-400 uppercase border-b dark:border-gray-700">
+                                <div className="p-4 space-y-2">
+                                    <div className="grid grid-cols-3 text-gray-400 font-bold mb-3 border-b border-gray-100 dark:border-gray-700 pb-2">
                                         <span>Orders</span>
-                                        <span className="text-right">Qty</span>
-                                        <span className="text-right">Bid</span>
+                                        <span className="text-center">Qty</span>
+                                        <span className="text-right">Price</span>
                                     </div>
-                                    {buyDepth.map((row, i) => (
-                                        <div key={i} className="grid grid-cols-3 gap-2 p-2 px-4 text-sm font-medium border-b border-dashed border-gray-100 dark:border-gray-800 last:border-0 hover:bg-blue-50 dark:hover:bg-blue-900/10">
-                                            <span className="text-blue-500 font-bold">{row.orders}</span>
-                                            <span className="text-gray-600 dark:text-gray-300 text-right">{row.qty}</span>
-                                            <span className="text-green-600 dark:text-green-400 font-bold text-right">{row.price}</span>
-                                        </div>
-                                    ))}
+                                    {marketDepth?.marketDepth?.buyMarketDepthList?.length > 0 ? (
+                                        marketDepth.marketDepth.buyMarketDepthList.map((row, i) => (
+                                            <div key={i} className="grid grid-cols-3 font-medium cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/10 p-1 rounded" onClick={() => { setOrder({ ...order, price: row.orderBookPrice || 0 }); setMode('buy'); }}>
+                                                <span className="text-green-500 font-bold">{row.orderCount ?? '-'}</span>
+                                                <span className="text-gray-600 dark:text-gray-300 text-center">{row.quantity ?? '-'}</span>
+                                                <span className="text-gray-900 dark:text-white text-right">{row.orderBookPrice != null ? row.orderBookPrice.toFixed(2) : '-'}</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center text-gray-400 py-4 col-span-3">No buy orders</div>
+                                    )}
                                 </div>
 
                                 {/* SELL SIDE */}
-                                <div>
-                                    <div className="grid grid-cols-3 gap-2 p-2 px-4 text-xs font-bold text-gray-400 uppercase border-b dark:border-gray-700">
-                                        <span className="text-right">Ask</span>
-                                        <span className="text-right">Qty</span>
+                                <div className="p-4 space-y-2">
+                                    <div className="grid grid-cols-3 text-gray-400 font-bold mb-3 border-b border-gray-100 dark:border-gray-700 pb-2">
+                                        <span>Price</span>
+                                        <span className="text-center">Qty</span>
                                         <span className="text-right">Orders</span>
                                     </div>
-                                    {sellDepth.map((row, i) => (
-                                        <div key={i} className="grid grid-cols-3 gap-2 p-2 px-4 text-sm font-medium border-b border-dashed border-gray-100 dark:border-gray-800 last:border-0 hover:bg-red-50 dark:hover:bg-red-900/10">
-                                            <span className="text-red-500 font-bold text-right">{row.price}</span>
-                                            <span className="text-gray-600 dark:text-gray-300 text-right">{row.qty}</span>
-                                            <span className="text-blue-500 font-bold text-right">{row.orders}</span>
-                                        </div>
-                                    ))}
+                                    {marketDepth?.marketDepth?.sellMarketDepthList?.length > 0 ? (
+                                        marketDepth.marketDepth.sellMarketDepthList.map((row, i) => (
+                                            <div key={i} className="grid grid-cols-3 font-medium cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/10 p-1 rounded" onClick={() => { setOrder({ ...order, price: row.orderBookPrice || 0 }); setMode('sell'); }}>
+                                                <span className="text-gray-900 dark:text-white">{row.orderBookPrice != null ? row.orderBookPrice.toFixed(2) : '-'}</span>
+                                                <span className="text-gray-600 dark:text-gray-300 text-center">{row.quantity ?? '-'}</span>
+                                                <span className="text-red-500 font-bold text-right">{row.orderCount ?? '-'}</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center text-gray-400 py-4 col-span-3">No sell orders</div>
+                                    )}
                                 </div>
                             </div>
                         ) : (

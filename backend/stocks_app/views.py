@@ -110,23 +110,19 @@ class TopGainersView(APIView):
     pagination_class = StandardResultsSetPagination
 
     def get(self, request):
-        stocks = Stock.objects.filter(is_active=True, change_percent__gt=0).order_by('-change_percent')
+        from .services import get_all_cached_stock_prices
+        all_stocks = get_all_cached_stock_prices()
         
-        # Check if pagination is requested (if 'page' or 'limit' is present)
-        # However, for Dashboard (legacy), we might want just list if no params.
-        # But 'limit' logic is handled by pagination class if we use generics or manually paginate.
+        gainers = [s for s in all_stocks if s.get('change_percent', 0) > 0]
+        gainers.sort(key=lambda x: x.get('change_percent', 0), reverse=True)
         
         if 'page' in request.query_params or 'limit' in request.query_params:
             paginator = self.pagination_class()
-            page = paginator.paginate_queryset(stocks, request)
+            page = paginator.paginate_queryset(gainers, request)
             if page is not None:
-                serializer = StockSerializer(page, many=True)
-                return paginator.get_paginated_response(serializer.data)
+                return paginator.get_paginated_response(page)
         
-        # Default fallback for Dashboard: just return top 10 list
-        stocks = stocks[:10]
-        serializer = StockSerializer(stocks, many=True)
-        return Response(serializer.data)
+        return Response(gainers[:10])
 
 
 class TopLosersView(APIView):
@@ -134,18 +130,19 @@ class TopLosersView(APIView):
     pagination_class = StandardResultsSetPagination
 
     def get(self, request):
-        stocks = Stock.objects.filter(is_active=True, change_percent__lt=0).order_by('change_percent')
+        from .services import get_all_cached_stock_prices
+        all_stocks = get_all_cached_stock_prices()
+        
+        losers = [s for s in all_stocks if s.get('change_percent', 0) < 0]
+        losers.sort(key=lambda x: x.get('change_percent', 0))
         
         if 'page' in request.query_params or 'limit' in request.query_params:
             paginator = self.pagination_class()
-            page = paginator.paginate_queryset(stocks, request)
+            page = paginator.paginate_queryset(losers, request)
             if page is not None:
-                serializer = StockSerializer(page, many=True)
-                return paginator.get_paginated_response(serializer.data)
+                return paginator.get_paginated_response(page)
                 
-        stocks = stocks[:10]
-        serializer = StockSerializer(stocks, many=True)
-        return Response(serializer.data)
+        return Response(losers[:10])
 
 
 class TopTurnoverView(APIView):
@@ -153,18 +150,19 @@ class TopTurnoverView(APIView):
     pagination_class = StandardResultsSetPagination
 
     def get(self, request):
-        stocks = Stock.objects.filter(is_active=True, total_traded_value__gt=0).order_by('-total_traded_value')
+        from .services import get_all_cached_stock_prices
+        all_stocks = get_all_cached_stock_prices()
+        
+        turnover = [s for s in all_stocks if s.get('total_traded_value', 0) > 0]
+        turnover.sort(key=lambda x: x.get('total_traded_value', 0), reverse=True)
         
         if 'page' in request.query_params or 'limit' in request.query_params:
             paginator = self.pagination_class()
-            page = paginator.paginate_queryset(stocks, request)
+            page = paginator.paginate_queryset(turnover, request)
             if page is not None:
-                serializer = StockSerializer(page, many=True)
-                return paginator.get_paginated_response(serializer.data)
+                return paginator.get_paginated_response(page)
 
-        stocks = stocks[:10]
-        serializer = StockSerializer(stocks, many=True)
-        return Response(serializer.data)
+        return Response(turnover[:10])
 
 
 class MarketStatusView(APIView):

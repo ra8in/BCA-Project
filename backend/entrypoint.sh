@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+echo "=== BCA Project Backend Startup ==="
+
 echo "Waiting for database..."
 python << END
 import os, time, psycopg2
@@ -24,8 +26,30 @@ for i in range(30):
         time.sleep(1)
 END
 
+echo "Waiting for Redis..."
+python << END
+import os, time
+redis_url = os.environ.get('REDIS_URL', '')
+if redis_url:
+    import redis
+    r = redis.from_url(redis_url)
+    for i in range(15):
+        try:
+            r.ping()
+            print("Redis ready!")
+            break
+        except:
+            print(f"Waiting for Redis... ({i+1}/15)")
+            time.sleep(1)
+else:
+    print("No REDIS_URL set, using in-memory cache")
+END
+
 echo "Running migrations..."
-python manage.py migrate
+python manage.py migrate --noinput
+
+echo "Collecting static files..."
+python manage.py collectstatic --noinput 2>/dev/null || echo "Static files collection skipped"
 
 echo "Creating superuser (if not exists)..."
 python manage.py shell << END
@@ -33,11 +57,13 @@ from users_app.models import CustomUser
 if not CustomUser.objects.filter(username='admin').exists():
     CustomUser.objects.create_superuser('admin', 'admin@example.com', 'admin123')
     print("Superuser created: admin/admin123")
+else:
+    print("Superuser already exists")
 END
 
 # Seed LIVE data from NEPSE API on startup
-echo "Checking and syncing company definitions, prices, and indices..."
-python manage.py sync_companies || echo "⚠️  Sync failed - continuing anyway"
+echo "Syncing company data, prices, and indices from NEPSE..."
+python manage.py sync_companies || echo "⚠️  Sync failed - continuing anyway (market may be closed)"
 
-echo "Starting server..."
+echo "=== Starting Django server ==="
 exec python manage.py runserver 0.0.0.0:8000

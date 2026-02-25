@@ -41,7 +41,9 @@ export const stockService = {
 
     getMarketDepth: async (symbol) => {
         try {
-            const response = await axios.get(`${API_URL}/market-depth/${symbol}/`);
+            const response = await axios.get(`${API_URL}/market-depth/${symbol}/`, {
+                params: { _t: Date.now() }  // Cache-bust: new ID every 5s so browser doesn't reuse stale response
+            });
             return response.data;
         } catch (error) {
             if (error.response && error.response.status === 429 && error.response.data) {

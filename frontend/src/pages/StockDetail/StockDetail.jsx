@@ -128,12 +128,26 @@ const StockDetail = () => {
         }
     };
 
-    // Load depth when toggled ON
+    // Load depth when toggled ON and auto-poll every 5 seconds if market open
     useEffect(() => {
-        if (showDepth && !marketDepth) {
-            handleDepthRefresh();
+        let intervalId;
+
+        if (showDepth) {
+            // Fetch immediately
+            if (!marketDepth) handleDepthRefresh();
+
+            // Setup 5-second polling if market is open
+            if (isMarketOpen) {
+                intervalId = setInterval(() => {
+                    handleDepthRefresh();
+                }, 5000);
+            }
         }
-    }, [showDepth]);
+
+        return () => {
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [showDepth, isMarketOpen, symbol]);
 
 
     // Update Global Sector & Stock Context
@@ -278,15 +292,17 @@ const StockDetail = () => {
                                         <table className="w-full text-sm">
                                             <thead className="bg-gray-50 dark:bg-gray-700/50">
                                                 <tr className="text-left text-gray-500 dark:text-gray-400">
-                                                    <th className="p-2 font-medium">Qty</th>
+                                                    <th className="p-2 font-medium">Orders</th>
+                                                    <th className="p-2 font-medium text-center">Qty</th>
                                                     <th className="p-2 font-medium text-right">Price</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                                 {marketDepth.marketDepth?.buyMarketDepthList?.map((order, i) => (
                                                     <tr key={i} className="hover:bg-green-50/50 dark:hover:bg-green-900/10">
-                                                        <td className="p-2 font-medium text-gray-900 dark:text-white">{order.quantity}</td>
-                                                        <td className="p-2 font-bold text-green-600 text-right">{order.orderBookOrderPrice}</td>
+                                                        <td className="p-2 font-bold text-green-600">{order.orderCount ?? '-'}</td>
+                                                        <td className="p-2 font-medium text-gray-900 dark:text-white text-center">{order.quantity ?? '-'}</td>
+                                                        <td className="p-2 font-bold text-green-600 text-right">{order.orderBookPrice != null ? parseFloat(order.orderBookPrice).toFixed(2) : '-'}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -304,15 +320,17 @@ const StockDetail = () => {
                                         <table className="w-full text-sm">
                                             <thead className="bg-gray-50 dark:bg-gray-700/50">
                                                 <tr className="text-left text-gray-500 dark:text-gray-400">
-                                                    <th className="p-2 font-medium text-right">Price</th>
-                                                    <th className="p-2 font-medium text-right">Qty</th>
+                                                    <th className="p-2 font-medium">Price</th>
+                                                    <th className="p-2 font-medium text-center">Qty</th>
+                                                    <th className="p-2 font-medium text-right">Orders</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                                 {marketDepth.marketDepth?.sellMarketDepthList?.map((order, i) => (
                                                     <tr key={i} className="hover:bg-red-50/50 dark:hover:bg-red-900/10">
-                                                        <td className="p-2 font-bold text-red-500 text-right">{order.orderBookOrderPrice}</td>
-                                                        <td className="p-2 font-medium text-gray-900 dark:text-white text-right">{order.quantity}</td>
+                                                        <td className="p-2 font-bold text-red-500">{order.orderBookPrice != null ? parseFloat(order.orderBookPrice).toFixed(2) : '-'}</td>
+                                                        <td className="p-2 font-medium text-gray-900 dark:text-white text-center">{order.quantity ?? '-'}</td>
+                                                        <td className="p-2 font-bold text-red-500 text-right">{order.orderCount ?? '-'}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

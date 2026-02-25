@@ -364,7 +364,9 @@ def _set_throttle(cache_key: str, delay_seconds: int = THROTTLE_DELAY):
 
 def get_cached_market_depth(symbol: str, client_id: str = 'anonymous') -> dict:
     """
-    Get market depth with 60-second cache and per-client throttling.
+    Get market depth with 5-second cache and per-client throttling.
+    Market depth is per-stock (cannot be batched), so we use a tighter
+    5-second refresh window to keep the order book fresh.
     
     Args:
         symbol: Stock symbol (e.g., 'NABIL')
@@ -373,14 +375,15 @@ def get_cached_market_depth(symbol: str, client_id: str = 'anonymous') -> dict:
     Returns:
         Market depth data with buy/sell orders
     """
+    DEPTH_CACHE_TTL = 5   # 5 seconds — order book changes fast
+    DEPTH_THROTTLE = 5    # 5 seconds between requests per client per stock
+    
     symbol = symbol.upper()
     cache_key = f"market_depth:{symbol}"
     throttle_key = f"throttle:market_depth:{client_id}:{symbol}"
     
-    # Check throttle FIRST (before checking cache)
-    # This prevents rapid successive requests even if cached
+    # Check throttle FIRST
     if _check_throttle(throttle_key):
-        # Return cached data if available, empty dict if not
         cached = cache.get(cache_key)
         if cached:
             logger.debug(f"Market depth throttled but returning cached data for {symbol}")
@@ -393,26 +396,85 @@ def get_cached_market_depth(symbol: str, client_id: str = 'anonymous') -> dict:
     cached = cache.get(cache_key)
     if cached is not None:
         logger.debug(f"Market depth cache HIT for {symbol}")
-        _set_throttle(throttle_key)  # Set throttle even on cache hit
+        _set_throttle(throttle_key, DEPTH_THROTTLE)
         return cached
     
-    # Cache MISS - fetch from API
+    # Cache MISS - fetch from NEPSE using sync_companies retry technique
     logger.debug(f"Market depth cache MISS for {symbol}")
-    nepse = _get_nepse_client()
     
+    # Only fetch if market is OPEN
+    from stocks_app.market_hours import get_market_state
+    if get_market_state() != "OPEN":
+        return {'error': 'Market is closed — no live order book', 'marketDepth': None}
+    
+    import time
+    from datetime import datetime
+    from nepse_data_api.market import Nepse as _Nepse
+
+    # Get company ID from DB (Stock.nepse_security_id) — no NEPSE API call needed,
+    # sync_companies already stored the same ID that the NEPSE API would return.
+    from stocks_app.models import Stock
     try:
-        depth = nepse.get_market_depth(symbol)
-        
-        # Store in cache with smart TTL
-        cache.set(cache_key, depth, _get_cache_ttl())
-        
-        # Set throttle
-        _set_throttle(throttle_key)
-        
+        stock_obj = Stock.objects.get(symbol=symbol)
+        company_id = stock_obj.nepse_security_id
+    except Stock.DoesNotExist:
+        return {'error': f'Symbol {symbol} not found in database'}
+    
+    if not company_id:
+        return {'error': f'Symbol {symbol} has no NEPSE security ID — run sync_companies first'}
+
+    # Start with the singleton — replace with fresh client on connection error
+    # (exactly as sync_companies._fetch_missing_from_profile does)
+    nepse_client = _get_nepse_client()
+    depth = None
+
+    for attempt in range(3):
+        try:
+            if attempt > 0:
+                time.sleep(0.1 * attempt)  # 0.1s, 0.2s rate-limit pause before retry
+
+            # POST with fresh payload_id — same technique as today-price Phase 2
+            payload_id = nepse_client._get_floorsheet_payload_id(company_id, datetime.now())
+            url = f"{nepse_client.BASE_URL}/api/nots/nepse-data/marketdepth/{company_id}"
+            payload = {"id": payload_id}
+            response = nepse_client.session.post(url, headers=nepse_client._get_auth_headers(), json=payload)
+
+            if response.status_code == 405:
+                # Server doesn't accept POST — fall back to GET
+                response = nepse_client.session.get(url, headers=nepse_client._get_auth_headers())
+
+            response.raise_for_status()
+            depth = response.json()
+
+            # Check if result is meaningful (has order book data)
+            buy = (depth or {}).get('marketDepth', {}).get('buyMarketDepthList')
+            sell = (depth or {}).get('marketDepth', {}).get('sellMarketDepthList')
+            if depth and (buy or sell):
+                break  # Got real data — stop retrying
+
+            # Empty result — sleep and retry (mirrors today-price first-load issue fix)
+            logger.info(f"Market depth empty for {symbol} (attempt {attempt+1}/3). Retrying...")
+            time.sleep(0.5)
+
+        except Exception as conn_err:
+            wait = 2 ** attempt  # exponential backoff: 1s, 2s, 4s
+            logger.warning(
+                f"Market depth attempt {attempt+1}/3 for {symbol}: {conn_err}. "
+                f"Refreshing token and waiting {wait}s..."
+            )
+            time.sleep(wait)
+            # Token likely expired — get a fresh one (exact sync_companies pattern)
+            # Also update the global singleton so the next request doesn't fail again on attempt 1
+            global _nepse_client
+            _nepse_client = _Nepse(enable_cache=False)
+            nepse_client = _nepse_client
+
+    if depth and 'error' not in depth:
+        cache.set(cache_key, depth, DEPTH_CACHE_TTL)
+        _set_throttle(throttle_key, DEPTH_THROTTLE)
         return depth
-    except Exception as e:
-        logger.error(f"Failed to fetch market depth for {symbol}: {e}")
-        return {'error': str(e)}
+
+    return depth or {'error': f'Could not fetch market depth for {symbol} after 3 attempts'}
 
 
 def _format_today_price_data(s_symbol: str, stock_data: dict, prev_close_override=None) -> dict:
@@ -747,24 +809,36 @@ def get_all_cached_stock_prices(client_id: str = 'anonymous') -> list:
         raw_results = {k.split(':')[1]: v for k, v in cached_data.items()}
         
     # Map raw cache keys into StockSerializer contract
+    from decimal import Decimal
     mapped_results = []
+    
     for sym, m in stock_meta.items():
         c = raw_results.get(sym, {})
+        
+        # Calculate circuit breakers (same logic as StockSerializer)
+        prev = c.get('previous_close', 0)
+        ltp = c.get('ltp', 0)
+        base = prev if prev and prev > 0 else ltp
+        circuit_high = float(format(Decimal(str(base)) * Decimal('1.10'), '.1f')) if base else None
+        circuit_low = float(format(Decimal(str(base)) * Decimal('0.90'), '.1f')) if base else None
+        
         mapped_results.append({
             'id': m['id'],
             'symbol': sym,
             'name': m['name'],
             'sector': m['sector_id'],
             'sector_name': m['sector__name'],
-            'last_price': c.get('ltp', 0),
+            'last_price': ltp,
             'change': c.get('change', 0),
             'change_percent': c.get('change_percent', 0),
-            'previous_close': c.get('previous_close', 0),
+            'previous_close': prev,
             'open_price': c.get('open', 0),
             'high_price': c.get('high', 0),
             'low_price': c.get('low', 0),
             'total_trade_quantity': c.get('volume', 0),
             'total_traded_value': c.get('turnover', 0),
+            'circuit_high': circuit_high,
+            'circuit_low': circuit_low,
             'is_active': True
         })
     
@@ -791,7 +865,7 @@ def get_cached_market_indices() -> list:
     nepse = _get_nepse_client()
     
     try:
-        indices_data = nepse.get_market_index()
+        indices_data = nepse.get_nepse_index()
         
         # Live polling: only update values.
         # nepse_id, name, symbol are set once by sync_companies.
