@@ -42,7 +42,8 @@ def _get_cache_ttl():
 
 
 # ===== NEPSE API Client (nepse-data-api) =====
-# Lazy initialization to avoid import-time network calls
+# Lazy singleton — one persistent session so NEPSE doesn't close the connection.
+# Token refresh is handled by _nepse_request() on 401 (re-calls authenticate() in-place).
 _nepse_client = None
 
 def _get_nepse_client():
@@ -52,6 +53,33 @@ def _get_nepse_client():
         from nepse_data_api import Nepse
         _nepse_client = Nepse(cache_ttl=15, enable_cache=True)
     return _nepse_client
+
+
+def _nepse_request(method: str, url: str, **kwargs):
+    """
+    Make a GET or POST to the NEPSE API via the singleton session.
+    On 401 (expired WASM token), calls nepse.authenticate() to refresh
+    the token IN-PLACE and retries ONCE — no new client, no new TCP connection.
+
+    Args:
+        method: 'get' or 'post'
+        url:    full URL to call
+        **kwargs: extra args forwarded to requests (json=, params=, etc.)
+
+    Returns:
+        requests.Response (already raise_for_status'd)
+    """
+    nepse = _get_nepse_client()
+    for attempt in range(2):          # attempt 0 = normal, attempt 1 = after re-auth
+        resp = getattr(nepse.session, method)(url, headers=nepse._get_auth_headers(), **kwargs)
+        if resp.status_code == 401 and attempt == 0:
+            logger.warning("NEPSE API returned 401 — refreshing WASM token and retrying...")
+            nepse.authenticate()      # refreshes access_token on the singleton in-place
+            continue
+        resp.raise_for_status()
+        return resp
+    resp.raise_for_status()           # raise if still 401 after retry
+    return resp
 
 
 def safe_decimal(value, default=Decimal('0')) -> Decimal:
@@ -162,6 +190,8 @@ def fetch_market_data() -> dict:
     Fetch ALL market data from NEPSE official API (via nepse-data-api library).
     Returns stocks, indices, and sub-indices data.
 
+    Uses the singleton + _nepse_request() which auto-refreshes the token on 401.
+
     Returns:
         dict with 'stocks', 'indices', and 'subIndices' keys
     """
@@ -180,21 +210,14 @@ def fetch_market_data() -> dict:
         # A. Fetch Traded Stocks (Today Price)
         try:
             url = f"{nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500"
-            # 0 is the generic market ID
             payload_id = nepse._get_floorsheet_payload_id(0, datetime.now())
             payload = {"id": payload_id}
-            
-            response = nepse.session.post(url, headers=nepse._get_auth_headers(), json=payload)
-            # Don't raise immediately, handle gracefully
-            if response.status_code == 200:
-                data = response.json()
-                stocks_raw = data.get('content', data) if isinstance(data, dict) else data
-            else:
-                logger.warning(f"today-price endpoint returned {response.status_code}")
-                # Fallback to standard get_stocks if manual post fails (though get_stocks might be empty)
-                stocks_raw = nepse.get_stocks()
+
+            response = _nepse_request('post', url, json=payload)  # auto-refreshes on 401
+            data = response.json()
+            stocks_raw = data.get('content', data) if isinstance(data, dict) else data
         except Exception as e:
-            logger.warning(f"Failed to fetch today-price (manual): {e}")
+            logger.warning(f"Failed to fetch today-price: {e}")
             stocks_raw = nepse.get_stocks()
             
         # Process Traded Stocks
@@ -281,44 +304,47 @@ def fill_missing_stock_prices():
     Fetch and update details for active stocks that have NO price data (newly added).
     This runs after the main update to 'heal' missing data without
     re-fetching dormant stocks that already have valid history.
+
+    Uses _nepse_request() which auto-refreshes the WASM token on 401 via the singleton.
     """
     from stocks_app.models import Stock
-    nepse = _get_nepse_client()
 
     # Find active stocks with no price (or 0)
-    missing_stocks = Stock.objects.filter(is_active=True, last_price__isnull=True) | \
-                     Stock.objects.filter(is_active=True, last_price=0)
-    
-    count = missing_stocks.count()
+    missing_stocks = list(Stock.objects.filter(is_active=True, last_price__isnull=True)) + \
+                     list(Stock.objects.filter(is_active=True, last_price=0))
+
+    count = len(missing_stocks)
     if count == 0:
         return
 
     logger.info(f"Refining data for {count} stocks with missing prices...")
+    nepse = _get_nepse_client()
     updated = 0
 
     for stock in missing_stocks:
         try:
-            # security_id is needed. If missing, we can't fetch.
             if not stock.nepse_security_id:
-                # Try to find ID from symbol map if possible (rare case)
                 continue
 
-            time.sleep(0.5) # Be gentle
-            details = nepse.get_security_details(stock.nepse_security_id)
+            time.sleep(0.5)  # Be gentle with the API
+
+            url = f"{nepse.BASE_URL}/api/nots/security/{stock.nepse_security_id}"
+            response = _nepse_request('get', url)  # auto-refreshes on 401
+            details = response.json()
+
             sec_data = details.get('securityMcsData', {})
 
             if sec_data:
-                # Update Stock directly
                 ltp = safe_decimal(sec_data.get('lastTradedPrice') or sec_data.get('closePrice'))
                 prev_close = safe_decimal(sec_data.get('previousClose'))
-                
+
                 stock.last_price = ltp
                 stock.open_price = safe_decimal(sec_data.get('openPrice'))
                 stock.high_price = safe_decimal(sec_data.get('highPrice'))
                 stock.low_price = safe_decimal(sec_data.get('lowPrice'))
                 stock.previous_close = prev_close
-                stock.total_trade_quantity = 0 # Assume 0 if we are here (not in today-price)
-                
+                stock.total_trade_quantity = 0  # Assume 0 — not in today-price
+
                 # Fix change calculation for dormant stocks
                 if ltp > 0 and prev_close > 0:
                     stock.change = round(ltp - prev_close, 2)
@@ -326,15 +352,15 @@ def fill_missing_stock_prices():
                 else:
                     stock.change = Decimal('0')
                     stock.change_percent = Decimal('0')
-                
+
                 stock.save(update_fields=[
-                    'last_price', 'open_price', 'high_price', 'low_price', 
+                    'last_price', 'open_price', 'high_price', 'low_price',
                     'previous_close', 'total_trade_quantity', 'change', 'change_percent'
                 ])
                 updated += 1
-                
+
         except Exception as e:
-            logger.warning(f"Failed to fill missing price for {stock.symbol}: {e}")
+            logger.warning(f"Error fetching security details for {stock.symbol} (id={stock.nepse_security_id}): {e}")
 
     logger.info(f"Filled prices for {updated}/{count} missing stocks")
 
@@ -409,7 +435,6 @@ def get_cached_market_depth(symbol: str, client_id: str = 'anonymous') -> dict:
     
     import time
     from datetime import datetime
-    from nepse_data_api.market import Nepse as _Nepse
 
     # Get company ID from DB (Stock.nepse_security_id) — no NEPSE API call needed,
     # sync_companies already stored the same ID that the NEPSE API would return.
@@ -423,51 +448,39 @@ def get_cached_market_depth(symbol: str, client_id: str = 'anonymous') -> dict:
     if not company_id:
         return {'error': f'Symbol {symbol} has no NEPSE security ID — run sync_companies first'}
 
-    # Start with the singleton — replace with fresh client on connection error
-    # (exactly as sync_companies._fetch_missing_from_profile does)
+    # Use _nepse_request — auto-refreshes the singleton token on 401, no new client created
     nepse_client = _get_nepse_client()
     depth = None
 
     for attempt in range(3):
         try:
             if attempt > 0:
-                time.sleep(0.1 * attempt)  # 0.1s, 0.2s rate-limit pause before retry
+                time.sleep(0.2 * attempt)
 
-            # POST with fresh payload_id — same technique as today-price Phase 2
             payload_id = nepse_client._get_floorsheet_payload_id(company_id, datetime.now())
             url = f"{nepse_client.BASE_URL}/api/nots/nepse-data/marketdepth/{company_id}"
             payload = {"id": payload_id}
-            response = nepse_client.session.post(url, headers=nepse_client._get_auth_headers(), json=payload)
 
-            if response.status_code == 405:
-                # Server doesn't accept POST — fall back to GET
-                response = nepse_client.session.get(url, headers=nepse_client._get_auth_headers())
+            try:
+                response = _nepse_request('post', url, json=payload)  # auto-refreshes on 401
+            except Exception:
+                # POST not accepted — fall back to GET (also auto-refreshes on 401)
+                response = _nepse_request('get', url)
 
-            response.raise_for_status()
             depth = response.json()
 
-            # Check if result is meaningful (has order book data)
             buy = (depth or {}).get('marketDepth', {}).get('buyMarketDepthList')
             sell = (depth or {}).get('marketDepth', {}).get('sellMarketDepthList')
             if depth and (buy or sell):
-                break  # Got real data — stop retrying
+                break
 
-            # Empty result — sleep and retry (mirrors today-price first-load issue fix)
             logger.info(f"Market depth empty for {symbol} (attempt {attempt+1}/3). Retrying...")
             time.sleep(0.5)
 
         except Exception as conn_err:
-            wait = 2 ** attempt  # exponential backoff: 1s, 2s, 4s
-            logger.warning(
-                f"Market depth attempt {attempt+1}/3 for {symbol}: {conn_err}. "
-                f"Refreshing token and waiting {wait}s..."
-            )
+            wait = 2 ** attempt
+            logger.warning(f"Market depth attempt {attempt+1}/3 for {symbol}: {conn_err}. Waiting {wait}s...")
             time.sleep(wait)
-            # Token likely expired — get a fresh one (exact sync_companies pattern)
-            # Also update the global singleton so the next request doesn't fail again on attempt 1
-            global _nepse_client
-            _nepse_client = _Nepse(enable_cache=False)
-            nepse_client = _nepse_client
 
     if depth and 'error' not in depth:
         cache.set(cache_key, depth, DEPTH_CACHE_TTL)
@@ -525,7 +538,7 @@ def _sync_new_companies(new_symbols: set):
 
     logger.info(f"Syncing {len(new_symbols)} new company(s) to DB: {new_symbols}")
     try:
-        nepse = _get_nepse_client()  # Reuse singleton — no fresh auth roundtrip
+        nepse = _get_nepse_client()  # singleton — _nepse_request handles 401 refresh
         companies = nepse.get_company_list()
 
         # Build a lookup keyed by symbol for fast access
@@ -611,7 +624,8 @@ def _refresh_global_stock_cache() -> dict:
         return results
 
     # === PHASE 2: Bulk-fetch from today-price ===
-    # Reuse the singleton client — avoids re-authenticating on every cache miss
+    # Use singleton + _nepse_request() which auto-refreshes WASM token on 401.
+    # Do NOT create a new Nepse() per call — that floods NEPSE auth endpoint → RemoteDisconnected.
     today_price_symbols = set()
     try:
         phase2_nepse = _get_nepse_client()
@@ -619,8 +633,7 @@ def _refresh_global_stock_cache() -> dict:
         payload_id = phase2_nepse._get_floorsheet_payload_id(0, datetime.now())
         payload = {"id": payload_id}
 
-        response = phase2_nepse.session.post(url, headers=phase2_nepse._get_auth_headers(), json=payload)
-        response.raise_for_status()
+        response = _nepse_request('post', url, json=payload)  # auto-refreshes on 401
         data = response.json()
 
         prices = []
@@ -859,12 +872,14 @@ def get_cached_market_indices() -> list:
     if cached:
         return cached
         
-    # Cache MISS - fetch from API
+    # Cache MISS — use singleton, _nepse_request() auto-refreshes token on 401
     logger.info("Fetching live market indices from NEPSE...")
     nepse = _get_nepse_client()
-    
+
     try:
-        indices_data = nepse.get_nepse_index()
+        url = f"{nepse.BASE_URL}/api/nots/nepse-index"
+        response = _nepse_request('get', url)
+        indices_data = response.json()
         
         # Live polling: only update values.
         # nepse_id, name, symbol are set once by sync_companies.
@@ -923,12 +938,14 @@ def get_cached_sub_indices() -> list:
     if cached:
         return cached
         
-    # Cache MISS - fetch from API
+    # Cache MISS — use singleton, _nepse_request() auto-refreshes token on 401
     logger.info("Fetching live sub-indices from NEPSE...")
     nepse = _get_nepse_client()
-    
+
     try:
-        sub_indices_data = nepse.get_sub_indices()
+        url = f"{nepse.BASE_URL}/api/nots"
+        response = _nepse_request('get', url)
+        sub_indices_data = response.json()
         
         # Live polling: ONLY update value fields.
         updated_subindices = []

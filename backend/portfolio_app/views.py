@@ -610,6 +610,8 @@ class UpdateOrderView(APIView):
             # Get new data
             quantity = int(request.data.get('quantity', order.quantity))
             price_input = request.data.get('price')
+            if price_input == '': 
+                price_input = None
             price = Decimal(price_input) if price_input else None
             
             # Determine new type

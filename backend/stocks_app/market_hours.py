@@ -92,11 +92,28 @@ def get_market_state():
     Returns:
         str: 'OPEN', 'CLOSED', or 'UNKNOWN'
     """
+    # Fast clock-based CLOSED guard:
+    # If current Nepal time is >= 3:00 PM or before 10:59 AM, it MUST be CLOSED.
+    # No API call needed — the clock is authoritative for the CLOSED state.
+    now = _get_now()
+    current_time = now.time()
+    weekday = now.weekday()
+
+    # Weekend (Friday=4, Saturday=5) or after market close or before pre-open check
+    if weekday in [4, 5] or current_time >= MARKET_CLOSE_TIME or current_time < PRE_OPEN_CHECK:
+        # Ensure cache reflects CLOSED so all paths are consistent
+        if cache.get(MARKET_STATE_KEY) != "CLOSED":
+            ttl = _seconds_until(PRE_OPEN_CHECK)
+            ttl = max(ttl, 60)
+            cache.set(MARKET_STATE_KEY, "CLOSED", ttl)
+            logger.info(f"Clock guard → CLOSED (time={current_time}, weekday={weekday}, TTL={ttl}s)")
+        return "CLOSED"
+
     state = cache.get(MARKET_STATE_KEY)
     if state is not None:
         return state
 
-    # No cached state — we're in UNKNOWN, resolve it now
+    # No cached state during trading window — resolve via API
     return _resolve_unknown_state()
 
 
