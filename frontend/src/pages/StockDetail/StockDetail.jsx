@@ -302,7 +302,7 @@ const StockDetail = () => {
                                                     <tr key={i} className="hover:bg-green-50/50 dark:hover:bg-green-900/10">
                                                         <td className="p-2 font-bold text-green-600">{order.orderCount ?? '-'}</td>
                                                         <td className="p-2 font-medium text-gray-900 dark:text-white text-center">{order.quantity ?? '-'}</td>
-                                                        <td className="p-2 font-bold text-green-600 text-right">{order.orderBookPrice != null ? parseFloat(order.orderBookPrice).toFixed(2) : '-'}</td>
+                                                        <td className="p-2 font-bold text-green-600 text-right">{order.orderBookOrderPrice != null ? parseFloat(order.orderBookOrderPrice).toFixed(2) : '-'}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -328,7 +328,7 @@ const StockDetail = () => {
                                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                                 {marketDepth.marketDepth?.sellMarketDepthList?.map((order, i) => (
                                                     <tr key={i} className="hover:bg-red-50/50 dark:hover:bg-red-900/10">
-                                                        <td className="p-2 font-bold text-red-500">{order.orderBookPrice != null ? parseFloat(order.orderBookPrice).toFixed(2) : '-'}</td>
+                                                        <td className="p-2 font-bold text-red-500">{order.orderBookOrderPrice != null ? parseFloat(order.orderBookOrderPrice).toFixed(2) : '-'}</td>
                                                         <td className="p-2 font-medium text-gray-900 dark:text-white text-center">{order.quantity ?? '-'}</td>
                                                         <td className="p-2 font-bold text-red-500 text-right">{order.orderCount ?? '-'}</td>
                                                     </tr>

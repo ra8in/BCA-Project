@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
         };
     }, []);
 
-    const checkAuth = () => {
+    const checkAuth = async () => {
         const accessToken = localStorage.getItem('access_token');
         if (accessToken) {
             try {
@@ -37,15 +37,25 @@ export const AuthProvider = ({ children }) => {
                 // Check if token is expired
                 const currentTime = Date.now() / 1000;
                 if (payload.exp && payload.exp < currentTime) {
-                    // Token expired
                     console.warn('Token expired');
                     logout();
-                    setIsLoading(false); // Ensure loading stops
+                    setIsLoading(false);
                     return;
                 }
 
-                setUser({ id: payload.user_id });
-                setIsAuthenticated(true);
+                // Fetch full profile info
+                try {
+                    const response = await axios.get('/api/accounts/profile/', {
+                        headers: { Authorization: `Bearer ${accessToken}` }
+                    });
+                    setUser(response.data);
+                    setIsAuthenticated(true);
+                } catch (err) {
+                    console.error('Failed to fetch profile', err);
+                    // Fallback to minimal info if profile fetch fails
+                    setUser({ id: payload.user_id });
+                    setIsAuthenticated(true);
+                }
             } catch (e) {
                 console.error('Invalid token', e);
                 logout();
@@ -60,9 +70,11 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('access_token', response.data.access);
             localStorage.setItem('refresh_token', response.data.refresh);
 
-            // Decode JWT to get user info
-            const payload = JSON.parse(atob(response.data.access.split('.')[1]));
-            setUser({ id: payload.user_id });
+            // Fetch profile info immediately after login
+            const profileResponse = await axios.get('/api/accounts/profile/', {
+                headers: { Authorization: `Bearer ${response.data.access}` }
+            });
+            setUser(profileResponse.data);
             setIsAuthenticated(true);
 
             return { success: true };
@@ -99,6 +111,19 @@ export const AuthProvider = ({ children }) => {
         return localStorage.getItem('access_token');
     };
 
+    const refreshProfile = async () => {
+        const accessToken = localStorage.getItem('access_token');
+        if (!accessToken) return;
+        try {
+            const response = await axios.get('/api/accounts/profile/', {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            setUser(response.data);
+        } catch (err) {
+            console.error('Failed to refresh profile', err);
+        }
+    };
+
     return (
         <AuthContext.Provider value={{
             user,
@@ -107,7 +132,8 @@ export const AuthProvider = ({ children }) => {
             login,
             register,
             logout,
-            getAccessToken
+            getAccessToken,
+            refreshProfile
         }}>
             {children}
         </AuthContext.Provider>

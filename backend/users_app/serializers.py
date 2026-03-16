@@ -23,3 +23,22 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             first_name=validated_data.get('first_name', '')
         )
         return user
+
+class UserSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='first_name')
+    profile_picture = serializers.ImageField(required=False, allow_null=True)
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'name', 'profile_picture')
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+
+class MoneyRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import MoneyRequest
+        model = MoneyRequest
+        fields = ('id', 'amount', 'reason', 'status', 'created_at')
+        read_only_fields = ('id', 'status', 'created_at')

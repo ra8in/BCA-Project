@@ -37,14 +37,14 @@ const Login = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+        <div className="flex-1 flex items-start justify-center px-4 py-2 -mt-2">
             <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 border border-gray-100 dark:border-gray-700">
                 <h2 className="text-3xl font-black text-center text-gray-800 dark:text-gray-100 mb-8">Welcome Back</h2>
-                {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">{error}</div>}
+                {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4 text-sm" role="alert">{error}</div>}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Username or Email</label>
+                        <label className="block text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 ml-1">Username or Email</label>
                         <input
                             type="text"
                             value={username}
@@ -56,7 +56,7 @@ const Login = () => {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-bold text-gray-600 dark:text-gray-400 mb-2">Password</label>
+                        <label className="block text-sm font-bold text-gray-600 dark:text-gray-400 mb-2 ml-1">Password</label>
                         <input
                             type="password"
                             value={password}
@@ -70,13 +70,13 @@ const Login = () => {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] shadow-lg shadow-blue-500/30"
+                        className="w-full py-4 mt-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl transition-all transform hover:scale-[1.01] shadow-lg shadow-blue-500/20"
                     >
                         {isLoading ? 'Signing In...' : 'Sign In'}
                     </button>
                 </form>
 
-                <p className="mt-8 text-center text-gray-500 text-sm">
+                <p className="mt-8 text-center text-gray-500 text-sm font-medium">
                     Don't have an account? <Link to="/register" className="text-blue-500 font-bold hover:underline">Create one</Link>
                 </p>
             </div>

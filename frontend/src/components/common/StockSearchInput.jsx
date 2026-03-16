@@ -11,7 +11,7 @@ const useDebounce = (value, delay) => {
     return debouncedValue;
 };
 
-const StockSearchInput = ({ onSelect, onEnterFilter, onTypingFilter, initialValue = '', placeholder = "Search Stock (e.g. NABIL)", disablePopup = false }) => {
+const StockSearchInput = ({ onSelect, onEnterFilter, onTypingFilter, initialValue = '', placeholder = "Search Stock (e.g. NABIL)", disablePopup = false, className = "" }) => {
     const [searchTerm, setSearchTerm] = useState(initialValue);
     const [results, setResults] = useState([]);
     const [showResults, setShowResults] = useState(false);
@@ -130,7 +130,7 @@ const StockSearchInput = ({ onSelect, onEnterFilter, onTypingFilter, initialValu
                     onKeyDown={handleKeyDown}
                     onFocus={() => { if (results.length > 0) setShowResults(true); }}
                     placeholder={placeholder}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 font-bold text-gray-800 dark:text-white focus:border-blue-500 outline-none uppercase transition-colors"
+                    className={`w-full bg-gray-50 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 font-bold text-gray-800 dark:text-white focus:border-blue-500 outline-none uppercase transition-colors ${className}`}
                 />
                 {loading && (
                     <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -157,10 +157,10 @@ const StockSearchInput = ({ onSelect, onEnterFilter, onTypingFilter, initialValu
                                     <div className="text-right">
                                         <p className="font-bold text-gray-900 dark:text-white">Rs. {parseFloat(stock.last_price).toLocaleString()}</p>
                                         <p className={`text-xs font-bold ${parseFloat(stock.change_percent) > 0
-                                                ? 'text-green-500'
-                                                : parseFloat(stock.change_percent) < 0
-                                                    ? 'text-red-500'
-                                                    : 'text-blue-500'
+                                            ? 'text-green-500'
+                                            : parseFloat(stock.change_percent) < 0
+                                                ? 'text-red-500'
+                                                : 'text-blue-500'
                                             }`}>
                                             {parseFloat(stock.change_percent) > 0 ? '+' : ''}{parseFloat(stock.change_percent).toFixed(2)}%
                                         </p>

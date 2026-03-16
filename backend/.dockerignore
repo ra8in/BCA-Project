@@ -1,6 +1,40 @@
+# Python
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+
+# Environment & secrets
 .env
+.env.*
+
+# Database
 db.sqlite3
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Docker (avoid recursive copy)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Static & media (generated at runtime)
 staticfiles/
+media/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docs & misc
+docs/
+*.md
+*.docx
+*.pdf

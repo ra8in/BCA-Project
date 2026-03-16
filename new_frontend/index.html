@@ -146,60 +146,60 @@
                 <!-- Global Indices Ticker (Moved from Dashboard) -->
                 <div class="indices-ticker-container">
                     <div class="indices-ticker">
-                        <div class="index-pill">
-                            <span class="index-name">NEPSE INDEX</span>
-                            <div class="index-data">
-                                <span class="index-val">2,640.54</span>
-                                <span class="index-chg positive"><i class="fas fa-caret-up"></i> +4.59 (0.17%)</span>
+                        <div class="index-card">
+                            <p class="index-label">NEPSE</p>
+                            <div class="index-data-row">
+                                <span class="index-value">2,640.54</span>
+                                <span class="index-change positive">+0.17%</span>
                             </div>
                         </div>
-                        <div class="index-pill">
-                            <span class="index-name">MANUFACTURING</span>
-                            <div class="index-data">
-                                <span class="index-val">8,789.50</span>
-                                <span class="index-chg positive"><i class="fas fa-caret-up"></i> +43.52 (0.49%)</span>
+                        <div class="index-card">
+                            <p class="index-label">MFG</p>
+                            <div class="index-data-row">
+                                <span class="index-value">8,789.50</span>
+                                <span class="index-change positive">+0.49%</span>
                             </div>
                         </div>
-                        <div class="index-pill">
-                            <span class="index-name">HOTELS AND TOURISM</span>
-                            <div class="index-data">
-                                <span class="index-val">7,048.58</span>
-                                <span class="index-chg positive"><i class="fas fa-caret-up"></i> +28.62 (0.40%)</span>
+                        <div class="index-card">
+                            <p class="index-label">HOTEL</p>
+                            <div class="index-data-row">
+                                <span class="index-value">7,048.58</span>
+                                <span class="index-change positive">+0.40%</span>
                             </div>
                         </div>
-                        <div class="index-pill">
-                            <span class="index-name">LIFE INSURANCE</span>
-                            <div class="index-data">
-                                <span class="index-val">12,915.30</span>
-                                <span class="index-chg positive"><i class="fas fa-caret-up"></i> +42.71 (0.33%)</span>
+                        <div class="index-card">
+                            <p class="index-label">LIFE INS</p>
+                            <div class="index-data-row">
+                                <span class="index-value">12,915.30</span>
+                                <span class="index-change positive">+0.33%</span>
                             </div>
                         </div>
-                        <div class="index-pill">
-                            <span class="index-name">HYDROPOWER</span>
-                            <div class="index-data">
-                                <span class="index-val">3,349.06</span>
-                                <span class="index-chg positive"><i class="fas fa-caret-up"></i> +10.72 (0.32%)</span>
+                        <div class="index-card">
+                            <p class="index-label">HYDRO</p>
+                            <div class="index-data-row">
+                                <span class="index-value">3,349.06</span>
+                                <span class="index-change positive">+0.32%</span>
                             </div>
                         </div>
-                        <div class="index-pill">
-                            <span class="index-name">BANKING</span>
-                            <div class="index-data">
-                                <span class="index-val">1,375.98</span>
-                                <span class="index-chg neutral">0.00 (0.00%)</span>
+                        <div class="index-card">
+                            <p class="index-label">BANKING</p>
+                            <div class="index-data-row">
+                                <span class="index-value">1,375.98</span>
+                                <span class="index-change neutral">0.00%</span>
                             </div>
                         </div>
-                        <div class="index-pill">
-                            <span class="index-name">MICROFINANCE</span>
-                            <div class="index-data">
-                                <span class="index-val">4,120.45</span>
-                                <span class="index-chg negative"><i class="fas fa-caret-down"></i> -5.12 (-0.12%)</span>
+                        <div class="index-card">
+                            <p class="index-label">MICRO</p>
+                            <div class="index-data-row">
+                                <span class="index-value">4,120.45</span>
+                                <span class="index-change negative">-0.12%</span>
                             </div>
                         </div>
-                        <div class="index-pill">
-                            <span class="index-name">DEVELOPMENT BANK</span>
-                            <div class="index-data">
-                                <span class="index-val">3,890.12</span>
-                                <span class="index-chg positive"><i class="fas fa-caret-up"></i> +8.45 (0.22%)</span>
+                        <div class="index-card">
+                            <p class="index-label">DEV BANK</p>
+                            <div class="index-data-row">
+                                <span class="index-value">3,890.12</span>
+                                <span class="index-change positive">+0.22%</span>
                             </div>
                         </div>
                     </div>
@@ -470,81 +470,334 @@
                     <!-- Trading Section -->
                     <section id="trading" class="content-section">
                         <div class="trading-layout">
+                            <!-- Left Side: Main Trading Interface -->
                             <div class="trading-main">
-                                <div class="card trading-form">
-                                    <div class="card-header">
-                                        <h2>Place Order</h2>
-                                        <div class="market-status mini">
-                                            <span class="status-dot pulse"></span>
-                                            <span class="status-text">Market Is Open</span>
+                                <div class="card broker-card">
+                                    <div class="broker-header">
+                                        <div class="broker-title">
+                                            <h2>Place Order</h2>
+                                            <span class="broker-status pulse-dot">Live</span>
+                                        </div>
+                                        <div class="trade-capsule-toggle" id="trade-capsule">
+                                            <button class="capsule-btn sell">SELL</button>
+                                            <button class="capsule-btn buy active">BUY</button>
+                                            <div class="capsule-slider"></div>
                                         </div>
                                     </div>
-                                    <div class="order-type-toggle">
-                                        <button class="toggle-btn active buy">Buy</button>
-                                        <button class="toggle-btn sell">Sell</button>
-                                    </div>
 
-                                    <div class="form-body">
-                                        <div class="input-group">
-                                            <label>Select Symbol</label>
-                                            <div class="select-wrapper">
-                                                <select id="trade-symbol">
-                                                    <option value="NABIL">NABIL - Nabil Bank</option>
-                                                    <option value="NICA">NICA - NIC Asia Bank</option>
-                                                    <option value="ADBL">ADBL - Agri Dev Bank</option>
-                                                    <option value="AHPC">AHPC - Arun Valley Hydropower</option>
-                                                </select>
+                                    <div class="broker-form-container">
+                                        <!-- Row 1: Main Inputs -->
+                                        <div class="broker-form-row">
+                                            <div class="input-block">
+                                                <label>Scrip</label>
+                                                <input type="text" id="broker-scrip" placeholder="Type Scrip & Enter"
+                                                    value="NABIL">
                                             </div>
-                                        </div>
-
-                                        <div class="input-row">
-                                            <div class="input-group">
+                                            <div class="input-block">
                                                 <label>Quantity</label>
-                                                <input type="number" id="trade-qty" placeholder="0">
+                                                <input type="number" id="broker-qty" placeholder="0">
                                             </div>
-                                            <div class="input-group">
-                                                <label>Price (Rs.)</label>
-                                                <input type="number" id="trade-price" placeholder="Market Price">
-                                            </div>
-                                        </div>
-
-                                        <div class="order-summary-box">
-                                            <div class="summary-line">
-                                                <span>Sub-Total</span>
-                                                <span id="sub-total">Rs. 0.00</span>
-                                            </div>
-                                            <div class="summary-line">
-                                                <span>Brokerage (0.3%)</span>
-                                                <span id="commission">Rs. 0.00</span>
-                                            </div>
-                                            <div class="summary-line">
-                                                <span>SEBON Fee (0.015%)</span>
-                                                <span id="sebon-fee">Rs. 0.00</span>
-                                            </div>
-                                            <div class="summary-line border-top">
-                                                <strong>Estimated Total</strong>
-                                                <strong id="final-total">Rs. 0.00</strong>
+                                            <div class="input-block">
+                                                <label>Price</label>
+                                                <input type="number" id="broker-price" placeholder="Price">
                                             </div>
                                         </div>
 
-                                        <button class="btn-execute buy">Place Buy Order</button>
+                                        <!-- Row 2: Info & Actions -->
+                                        <div class="broker-action-row">
+                                            <div class="order-type-radios">
+                                                <label class="radio-label">
+                                                    <input type="radio" name="orderType" value="LMT" checked>
+                                                    <span class="radio-custom"></span> LMT
+                                                </label>
+                                                <label class="radio-label">
+                                                    <input type="radio" name="orderType" value="MKT">
+                                                    <span class="radio-custom"></span> MKT
+                                                </label>
+                                            </div>
+
+                                            <div class="info-blocks">
+                                                <div class="info-block">
+                                                    <span>Estimated Total</span>
+                                                    <strong id="broker-total">0.00</strong>
+                                                </div>
+                                                <div class="info-block">
+                                                    <span>Available Collateral</span>
+                                                    <strong>42,455.00</strong>
+                                                </div>
+                                                <div class="info-block">
+                                                    <span>Available Quantity</span>
+                                                    <strong>0.00</strong>
+                                                </div>
+                                            </div>
+
+                                            <div class="action-buttons">
+                                                <button class="btn-broker-submit buy"
+                                                    id="btn-broker-action">BUY</button>
+                                                <button class="btn-broker-reset">RESET</button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Row 3: Market Depth & Info -->
+                                        <div class="depth-grid">
+                                            <!-- Top 5 Buy Table -->
+                                            <div class="depth-table-container buy-depth">
+                                                <div class="depth-header">TOP 5 BUY</div>
+                                                <table class="depth-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Order</th>
+                                                            <th>Qty</th>
+                                                            <th>Price</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr>
+                                                            <td>1</td>
+                                                            <td>500</td>
+                                                            <td>509.00</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>3</td>
+                                                            <td>1200</td>
+                                                            <td>508.50</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>1</td>
+                                                            <td>100</td>
+                                                            <td>508.00</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>2</td>
+                                                            <td>450</td>
+                                                            <td>507.00</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>5</td>
+                                                            <td>2500</td>
+                                                            <td>506.50</td>
+                                                        </tr>
+                                                    </tbody>
+                                                    <tfoot>
+                                                        <tr>
+                                                            <td>Total Qty</td>
+                                                            <td colspan="2" class="total-val">4750</td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+
+                                            <!-- Top 5 Sell Table -->
+                                            <div class="depth-table-container sell-depth">
+                                                <div class="depth-header">TOP 5 SELL</div>
+                                                <table class="depth-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Price</th>
+                                                            <th>Qty</th>
+                                                            <th>Order</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr>
+                                                            <td>510.00</td>
+                                                            <td>200</td>
+                                                            <td>1</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>510.50</td>
+                                                            <td>800</td>
+                                                            <td>2</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>511.00</td>
+                                                            <td>1500</td>
+                                                            <td>4</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>512.00</td>
+                                                            <td>300</td>
+                                                            <td>1</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>513.00</td>
+                                                            <td>1000</td>
+                                                            <td>2</td>
+                                                        </tr>
+                                                    </tbody>
+                                                    <tfoot>
+                                                        <tr>
+                                                            <td>Total Qty</td>
+                                                            <td colspan="2" class="total-val">3800</td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+
+                                            <!-- Stock Information List -->
+                                            <div class="stock-info-container">
+                                                <div class="info-header">Stock Information</div>
+                                                <ul class="stock-info-list">
+                                                    <li><span>D.High</span><strong>514.00</strong></li>
+                                                    <li><span>D.Low</span><strong>505.00</strong></li>
+                                                    <li><span>P.Close</span><strong>504.50</strong></li>
+                                                    <li><span>Volume</span><strong>12,450</strong></li>
+                                                    <li><span>Turnover</span><strong>63.6M</strong></li>
+                                                </ul>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
+                            <!-- Right Side: Watchlist -->
                             <div class="trading-side">
-                                <div class="card order-history">
+                                <div class="card watchlist-card">
                                     <div class="card-header">
-                                        <h2>Order History</h2>
-                                        <button class="btn-refresh"><i class="fas fa-sync-alt"></i></button>
+                                        <h2><i class="fas fa-list"></i> Watchlist</h2>
+                                        <button class="btn-refresh"><i class="fas fa-plus"></i></button>
                                     </div>
-                                    <div class="history-content">
-                                        <div class="empty-history">
-                                            <i class="fas fa-receipt"></i>
-                                            <p>No recent orders found</p>
-                                            <span>Your executed and pending orders will appear here.</span>
+                                    <div class="watchlist-content">
+                                        <div class="watchlist-item"
+                                            onclick="document.getElementById('broker-scrip').value='NICA'">
+                                            <div class="wl-stock">
+                                                <strong>NICA</strong>
+                                                <span>NIC Asia Bank</span>
+                                            </div>
+                                            <div class="wl-price positive">
+                                                <strong>430.00</strong>
+                                                <span>+1.5%</span>
+                                            </div>
+                                        </div>
+                                        <div class="watchlist-item"
+                                            onclick="document.getElementById('broker-scrip').value='AHPC'">
+                                            <div class="wl-stock">
+                                                <strong>AHPC</strong>
+                                                <span>Arun Valley Hydro</span>
+                                            </div>
+                                            <div class="wl-price positive">
+                                                <strong>257.10</strong>
+                                                <span>+0.8%</span>
+                                            </div>
+                                        </div>
+                                        <div class="watchlist-item"
+                                            onclick="document.getElementById('broker-scrip').value='SHL'">
+                                            <div class="wl-stock">
+                                                <strong>SHL</strong>
+                                                <span>Soaltee Hotel</span>
+                                            </div>
+                                            <div class="wl-price negative">
+                                                <strong>312.00</strong>
+                                                <span>-2.1%</span>
+                                            </div>
+                                        </div>
+                                        <div class="watchlist-item"
+                                            onclick="document.getElementById('broker-scrip').value='CIT'">
+                                            <div class="wl-stock">
+                                                <strong>CIT</strong>
+                                                <span>Citizen Inv Trust</span>
+                                            </div>
+                                            <div class="wl-price neutral">
+                                                <strong>2150.00</strong>
+                                                <span>0.0%</span>
+                                            </div>
+                                        </div>
+                                        <div class="watchlist-item"
+                                            onclick="document.getElementById('broker-scrip').value='NRIC'">
+                                            <div class="wl-stock">
+                                                <strong>NRIC</strong>
+                                                <span>Nepal Reinsurance</span>
+                                            </div>
+                                            <div class="wl-price positive">
+                                                <strong>702.50</strong>
+                                                <span>+3.2%</span>
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Orders & History Table -->
+                        <div class="active-orders-section">
+                            <div class="market-data-header">
+                                <h2><i class="fas fa-history"></i> Active Orders & History</h2>
+                                <p>View and manage your recent trading activity</p>
+                            </div>
+
+                            <div class="card order-history-card">
+                                <div class="table-responsive">
+                                    <table class="market-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Order ID</th>
+                                                <th>Symbol</th>
+                                                <th>Type</th>
+                                                <th>Quantity</th>
+                                                <th>Price</th>
+                                                <th>Status</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>#ORD-8921</td>
+                                                <td>
+                                                    <div class="symbol-cell">
+                                                        <span class="symbol">NICA</span>
+                                                        <span class="company-name">NIC Asia Bank Ltd.</span>
+                                                    </div>
+                                                </td>
+                                                <td><span class="badge badge-success">BUY</span></td>
+                                                <td>100</td>
+                                                <td>Rs. 430.00</td>
+                                                <td><span class="status-badge pending">Pending</span></td>
+                                                <td><button class="btn-cancel">Cancel</button></td>
+                                            </tr>
+                                            <tr>
+                                                <td>#ORD-8920</td>
+                                                <td>
+                                                    <div class="symbol-cell">
+                                                        <span class="symbol">NABIL</span>
+                                                        <span class="company-name">Nabil Bank Limited</span>
+                                                    </div>
+                                                </td>
+                                                <td><span class="badge badge-danger">SELL</span></td>
+                                                <td>250</td>
+                                                <td>Rs. 515.50</td>
+                                                <td><span class="status-badge executed">Executed</span></td>
+                                                <td>-</td>
+                                            </tr>
+                                            <tr>
+                                                <td>#ORD-8919</td>
+                                                <td>
+                                                    <div class="symbol-cell">
+                                                        <span class="symbol">SHL</span>
+                                                        <span class="company-name">Soaltee Hotel Limited</span>
+                                                    </div>
+                                                </td>
+                                                <td><span class="badge badge-success">BUY</span></td>
+                                                <td>500</td>
+                                                <td>Rs. 312.00</td>
+                                                <td><span class="status-badge executed">Executed</span></td>
+                                                <td>-</td>
+                                            </tr>
+                                            <tr>
+                                                <td>#ORD-8918</td>
+                                                <td>
+                                                    <div class="symbol-cell">
+                                                        <span class="symbol">NRIC</span>
+                                                        <span class="company-name">Nepal Reinsurance Co.</span>
+                                                    </div>
+                                                </td>
+                                                <td><span class="badge badge-danger">SELL</span></td>
+                                                <td>50</td>
+                                                <td>Rs. 702.50</td>
+                                                <td><span class="status-badge rejected">Rejected</span></td>
+                                                <td>-</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
@@ -671,6 +924,7 @@
                     <!-- Profile Section -->
                     <section id="profile" class="content-section">
                         <div class="profile-container">
+                            <!-- Profile Header Card -->
                             <div class="profile-header-card">
                                 <div class="profile-main-info">
                                     <img src="https://ui-avatars.com/api/?name=Guest+User&background=C388F7&color=fff"
@@ -682,11 +936,13 @@
                                     </div>
                                 </div>
                                 <div class="profile-actions">
-                                    <button class="btn-profile-edit"><i class="fas fa-edit"></i> Edit Profile</button>
+                                    <button class="btn-profile-edit" id="btn-edit-profile"><i class="fas fa-edit"></i>
+                                        Edit Profile</button>
                                 </div>
                             </div>
 
                             <div class="profile-details-grid">
+                                <!-- Account Summary -->
                                 <div class="card detail-card">
                                     <div class="card-header">
                                         <h3>Account Summary</h3>
@@ -707,6 +963,7 @@
                                     </div>
                                 </div>
 
+                                <!-- Trading Statistics -->
                                 <div class="card detail-card">
                                     <div class="card-header">
                                         <h3>Trading Statistics</h3>
@@ -723,6 +980,126 @@
                                         <div class="detail-item">
                                             <span class="label">Profit Factor</span>
                                             <span class="value">1.4</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Personal Information -->
+                                <div class="card detail-card">
+                                    <div class="card-header">
+                                        <h3>Personal Information</h3>
+                                    </div>
+                                    <div class="detail-list">
+                                        <div class="detail-item">
+                                            <span class="label">Full Name</span>
+                                            <span class="value profile-editable">Guest User</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Email</span>
+                                            <span class="value profile-editable">guest.user@nepsepro.com</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Phone</span>
+                                            <span class="value profile-editable">+977-9841234567</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Address</span>
+                                            <span class="value profile-editable">Kathmandu, Nepal</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Trading Account Details -->
+                                <div class="card detail-card">
+                                    <div class="card-header">
+                                        <h3>Trading Account</h3>
+                                    </div>
+                                    <div class="detail-list">
+                                        <div class="detail-item">
+                                            <span class="label">DEMAT Number</span>
+                                            <span class="value">1301080012345678</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Broker Number</span>
+                                            <span class="value">58 — Kumari Securities</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Client ID</span>
+                                            <span class="value">NP-88240058</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">DP Name</span>
+                                            <span class="value">Kumari Bank Ltd.</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Security & Login -->
+                                <div class="card detail-card">
+                                    <div class="card-header">
+                                        <h3>Security & Login</h3>
+                                    </div>
+                                    <div class="detail-list">
+                                        <div class="detail-item">
+                                            <span class="label">Last Login</span>
+                                            <span class="value">Mar 15, 2026 — 10:22 PM</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Password Changed</span>
+                                            <span class="value">Feb 01, 2026</span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label">Two-Factor Auth</span>
+                                            <span class="value"><span class="badge gray">Disabled</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Recent Activity -->
+                                <div class="card detail-card">
+                                    <div class="card-header">
+                                        <h3>Recent Activity</h3>
+                                    </div>
+                                    <div class="activity-list">
+                                        <div class="activity-item">
+                                            <div class="activity-icon login"><i class="fas fa-sign-in-alt"></i></div>
+                                            <div class="activity-details">
+                                                <strong>Logged In</strong>
+                                                <span>From Chrome on Linux</span>
+                                            </div>
+                                            <span class="activity-time">2 min ago</span>
+                                        </div>
+                                        <div class="activity-item">
+                                            <div class="activity-icon trade"><i class="fas fa-exchange-alt"></i></div>
+                                            <div class="activity-details">
+                                                <strong>Bought 100 units of NABIL</strong>
+                                                <span>Rs. 89,200.00</span>
+                                            </div>
+                                            <span class="activity-time">3 hrs ago</span>
+                                        </div>
+                                        <div class="activity-item">
+                                            <div class="activity-icon alert"><i class="fas fa-bell"></i></div>
+                                            <div class="activity-details">
+                                                <strong>Alert Triggered: AHPC</strong>
+                                                <span>Target Rs. 260.00 reached</span>
+                                            </div>
+                                            <span class="activity-time">5 hrs ago</span>
+                                        </div>
+                                        <div class="activity-item">
+                                            <div class="activity-icon trade"><i class="fas fa-exchange-alt"></i></div>
+                                            <div class="activity-details">
+                                                <strong>Sold 50 units of NICA</strong>
+                                                <span>Rs. 44,500.00</span>
+                                            </div>
+                                            <span class="activity-time">Yesterday</span>
+                                        </div>
+                                        <div class="activity-item">
+                                            <div class="activity-icon login"><i class="fas fa-sign-in-alt"></i></div>
+                                            <div class="activity-details">
+                                                <strong>Logged In</strong>
+                                                <span>From Firefox on Windows</span>
+                                            </div>
+                                            <span class="activity-time">2 days ago</span>
                                         </div>
                                     </div>
                                 </div>
@@ -924,7 +1301,7 @@
                                 </div>
 
                                 <div class="settings-body">
-                                    <!-- Profile Block -->
+                                    <!-- User Profile Block -->
                                     <div class="settings-group">
                                         <h3>User Profile</h3>
                                         <div class="profile-card">
@@ -939,7 +1316,160 @@
                                         </div>
                                     </div>
 
+                                    <!-- Appearance -->
+                                    <div class="settings-group">
+                                        <h3>Appearance</h3>
+                                        <div class="setting-list">
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon"><i class="fas fa-moon"></i></div>
+                                                    <div class="setting-text">
+                                                        <strong>Dark Mode</strong>
+                                                        <span>Switch between light and dark themes</span>
+                                                    </div>
+                                                </div>
+                                                <label class="switch">
+                                                    <input type="checkbox" id="settings-theme-toggle">
+                                                    <span class="slider round"></span>
+                                                </label>
+                                            </div>
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon"><i class="fas fa-palette"></i></div>
+                                                    <div class="setting-text">
+                                                        <strong>Accent Color</strong>
+                                                        <span>Choose your preferred interface color</span>
+                                                    </div>
+                                                </div>
+                                                <div class="color-picker" id="accent-color-picker">
+                                                    <span class="color-option active" data-color="#C388F7"
+                                                        style="background:#C388F7;" title="Purple"></span>
+                                                    <span class="color-option" data-color="#3B82F6"
+                                                        style="background:#3B82F6;" title="Blue"></span>
+                                                    <span class="color-option" data-color="#10B981"
+                                                        style="background:#10B981;" title="Green"></span>
+                                                    <span class="color-option" data-color="#F59E0B"
+                                                        style="background:#F59E0B;" title="Orange"></span>
+                                                    <span class="color-option" data-color="#EF4444"
+                                                        style="background:#EF4444;" title="Red"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
 
+                                    <!-- Notifications -->
+                                    <div class="settings-group">
+                                        <h3>Notifications</h3>
+                                        <div class="setting-list">
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon"><i class="fas fa-bell"></i></div>
+                                                    <div class="setting-text">
+                                                        <strong>Price Alert Emails</strong>
+                                                        <span>Receive email when price alerts are triggered</span>
+                                                    </div>
+                                                </div>
+                                                <label class="switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="slider round"></span>
+                                                </label>
+                                            </div>
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon"><i class="fas fa-clock"></i></div>
+                                                    <div class="setting-text">
+                                                        <strong>Market Open/Close Alerts</strong>
+                                                        <span>Get notified when NEPSE opens and closes</span>
+                                                    </div>
+                                                </div>
+                                                <label class="switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="slider round"></span>
+                                                </label>
+                                            </div>
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon"><i class="fas fa-chart-line"></i></div>
+                                                    <div class="setting-text">
+                                                        <strong>Portfolio Updates</strong>
+                                                        <span>Daily summary of portfolio performance</span>
+                                                    </div>
+                                                </div>
+                                                <label class="switch">
+                                                    <input type="checkbox">
+                                                    <span class="slider round"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Account & Security -->
+                                    <div class="settings-group">
+                                        <h3>Account & Security</h3>
+                                        <div class="setting-list">
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon"><i class="fas fa-lock"></i></div>
+                                                    <div class="setting-text">
+                                                        <strong>Change Password</strong>
+                                                        <span>Update your account password</span>
+                                                    </div>
+                                                </div>
+                                                <button class="btn-setting-action">Change</button>
+                                            </div>
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon"><i class="fas fa-shield-alt"></i></div>
+                                                    <div class="setting-text">
+                                                        <strong>Two-Factor Authentication</strong>
+                                                        <span>Add an extra layer of security to your account</span>
+                                                    </div>
+                                                </div>
+                                                <label class="switch">
+                                                    <input type="checkbox">
+                                                    <span class="slider round"></span>
+                                                </label>
+                                            </div>
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon"><i class="fas fa-desktop"></i></div>
+                                                    <div class="setting-text">
+                                                        <strong>Active Sessions</strong>
+                                                        <span>1 active session on this device</span>
+                                                    </div>
+                                                </div>
+                                                <button class="btn-setting-action">Manage</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Data & Privacy -->
+                                    <div class="settings-group">
+                                        <h3>Data & Privacy</h3>
+                                        <div class="setting-list">
+                                            <div class="setting-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon"><i class="fas fa-download"></i></div>
+                                                    <div class="setting-text">
+                                                        <strong>Export Portfolio Data</strong>
+                                                        <span>Download your portfolio and trade history as CSV</span>
+                                                    </div>
+                                                </div>
+                                                <button class="btn-setting-action">Export</button>
+                                            </div>
+                                            <div class="setting-row danger-row">
+                                                <div class="setting-info">
+                                                    <div class="setting-icon danger"><i class="fas fa-trash-alt"></i>
+                                                    </div>
+                                                    <div class="setting-text">
+                                                        <strong>Delete Account</strong>
+                                                        <span>Permanently delete your account and all data</span>
+                                                    </div>
+                                                </div>
+                                                <button class="btn-setting-danger">Delete</button>
+                                            </div>
+                                        </div>
+                                    </div>
 
                                 </div>
                             </div>
@@ -948,7 +1478,7 @@
                 </div> <!-- End of content-container -->
         </main>
     </div>
-    <script src="script.js"></script>
+    <script src="Script.js"></script>
 </body>
 
 </html>

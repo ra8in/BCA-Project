@@ -4,7 +4,7 @@ import axios from 'axios';
 /**
  * MarketStatusIndicator - Shows a green/red dot indicating market open/close status
  */
-const MarketStatusIndicator = () => {
+const MarketStatusIndicator = ({ collapsed = false }) => {
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -41,24 +41,28 @@ const MarketStatusIndicator = () => {
     const isOpen = status?.is_open;
 
     return (
-        <div className="flex items-center gap-2 px-3 py-2" title={status?.message}>
-            {/* Pulsing dot */}
-            <div className="relative">
-                <div className={`w-3 h-3 rounded-full ${isOpen ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                {isOpen && (
-                    <div className="absolute inset-0 w-3 h-3 rounded-full bg-green-400 animate-ping opacity-75"></div>
-                )}
+        <div className={`flex items-center gap-6 px-6 h-[54px] transition-all overflow-hidden`} title={status?.message}>
+            {/* Pulsing dot container (aligned tightly but wrapped in 24px box) */}
+            <div className="w-6 flex justify-center flex-shrink-0">
+                <div className="relative">
+                    <div className={`w-3 h-3 rounded-full ${isOpen ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    {isOpen && (
+                        <div className="absolute inset-0 w-3 h-3 rounded-full bg-green-400 animate-ping opacity-75"></div>
+                    )}
+                </div>
             </div>
 
             {/* Status text */}
-            <div className="flex flex-col">
-                <span className={`text-xs font-bold ${isOpen ? 'text-green-400' : 'text-red-400'}`}>
-                    {isOpen ? 'MARKET OPEN' : 'MARKET CLOSED'}
-                </span>
-                <span className="text-[10px] text-gray-500">
-                    {status?.trading_hours}
-                </span>
-            </div>
+            {!collapsed && (
+                <div className="flex flex-col flex-1 overflow-hidden">
+                    <span className={`text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis ${isOpen ? 'text-green-400' : 'text-red-400'}`}>
+                        {isOpen ? 'MARKET OPEN' : 'MARKET CLOSED'}
+                    </span>
+                    <span className="text-[10px] text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis">
+                        {status?.trading_hours}
+                    </span>
+                </div>
+            )}
         </div>
     );
 };

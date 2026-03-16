@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { MarketContext } from '../../context/MarketContext';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { calculatorService } from '../../services/calculatorService';
 import { portfolioService } from '../../services/portfolioService';
 import { stockService } from '../../services/stockService';
+import watchlistService from '../../services/watchlistService';
 import StockSearchInput from '../../components/common/StockSearchInput';
 import WatchlistMarker from '../../components/common/WatchlistMarker';
 
@@ -24,7 +25,7 @@ const Trading = () => {
 
 
     // State
-    const [mode, setMode] = useState(null); // 'buy', 'sell', or null (view only)
+    const [mode, setMode] = useState('buy'); // 'buy' or 'sell' (default 'buy')
     const [order, setOrder] = useState({
         symbol: '',
         qty: '',
@@ -34,6 +35,7 @@ const Trading = () => {
     const [selectedStockData, setSelectedStockData] = useState(null);
 
     const [holdings, setHoldings] = useState([]);
+    const [cashBalance, setCashBalance] = useState(0);
     const { updateSector, updateStock } = useContext(MarketContext);
 
     // Order History State
@@ -51,6 +53,19 @@ const Trading = () => {
     const [activePage, setActivePage] = useState(1);
     const [historyPage, setHistoryPage] = useState(1);
     const pageSize = 10;
+
+    // Watchlist State
+    const [wlGroups, setWlGroups] = useState([]);
+    const [wlSelectedGroup, setWlSelectedGroup] = useState(null);
+    const [wlItems, setWlItems] = useState([]);
+    const [wlLoading, setWlLoading] = useState(false);
+
+    // Watchlist Search State
+    const [wlShowSearch, setWlShowSearch] = useState(false);
+    const [wlSearchQuery, setWlSearchQuery] = useState('');
+    const [wlSearchResults, setWlSearchResults] = useState([]);
+    const [wlSearchLoading, setWlSearchLoading] = useState(false);
+    const wlSearchRef = useRef(null);
 
     // Derived Filtered Orders
     const getFilteredOrders = (orders) => {
@@ -82,16 +97,95 @@ const Trading = () => {
         }
     };
     useEffect(() => {
-        const fetchHoldings = async () => {
+        const fetchInitialData = async () => {
             try {
-                const data = await portfolioService.getHoldings();
-                setHoldings(data);
+                const [holdingsData, portfolioData] = await Promise.all([
+                    portfolioService.getHoldings(),
+                    portfolioService.getPortfolio()
+                ]);
+                setHoldings(holdingsData);
+                if (portfolioData?.cash_balance != null) {
+                    setCashBalance(parseFloat(portfolioData.cash_balance));
+                }
             } catch (err) {
-                console.error("Failed to fetch holdings", err);
+                console.error("Failed to fetch initial data", err);
             }
         };
-        fetchHoldings();
-        fetchOrders(); // Fetch orders on mount
+        fetchInitialData();
+        fetchOrders();
+        fetchWatchlistGroups();
+    }, []);
+
+    // Watchlist Fetch Logic
+    const fetchWatchlistGroups = async () => {
+        setWlLoading(true);
+        try {
+            const data = await watchlistService.getGroups();
+            setWlGroups(data);
+            if (data.length > 0) {
+                setWlSelectedGroup(data[0]);
+                fetchWatchlistItems(data[0].id);
+            }
+        } catch (err) {
+            console.error("Failed to fetch watchlist groups", err);
+        } finally {
+            setWlLoading(false);
+        }
+    };
+
+    const fetchWatchlistItems = async (groupId) => {
+        try {
+            const data = await watchlistService.getItems(groupId);
+            setWlItems(data);
+        } catch (err) {
+            console.error("Failed to fetch watchlist items", err);
+        }
+    };
+
+    // Watchlist Add/Remove/Search
+    const wlHandleSearch = async (query) => {
+        setWlSearchQuery(query);
+        if (query.length < 2) { setWlSearchResults([]); return; }
+        setWlSearchLoading(true);
+        try {
+            const results = await stockService.search(query);
+            setWlSearchResults(results);
+        } catch (err) { console.error("Search failed", err); }
+        finally { setWlSearchLoading(false); }
+    };
+
+    const wlHandleAdd = async (stock) => {
+        if (!wlSelectedGroup) return;
+        try {
+            await watchlistService.addItem(wlSelectedGroup.id, stock.id);
+            fetchWatchlistItems(wlSelectedGroup.id);
+            setWlSearchQuery('');
+            setWlSearchResults([]);
+            setWlShowSearch(false);
+        } catch (err) {
+            console.error("Failed to add stock", err);
+        }
+    };
+
+    const wlHandleRemove = async (e, itemId) => {
+        e.stopPropagation();
+        try {
+            await watchlistService.removeItem(itemId);
+            setWlItems(prev => prev.filter(i => i.id !== itemId));
+        } catch (err) {
+            console.error("Failed to remove item", err);
+        }
+    };
+
+    // Close watchlist search on outside click
+    useEffect(() => {
+        const handleClick = (e) => {
+            if (wlSearchRef.current && !wlSearchRef.current.contains(e.target)) {
+                setWlShowSearch(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
     }, []);
 
     // Fetch Orders
@@ -433,6 +527,11 @@ const Trading = () => {
 
             console.log("Transaction Result:", result);
 
+            // Update balance from API response
+            if (result?.new_balance != null) {
+                setCashBalance(result.new_balance);
+            }
+
             // Refresh Data
             fetchOrders();
             const holdingsData = await portfolioService.getHoldings();
@@ -469,478 +568,579 @@ const Trading = () => {
 
 
             <h2 className="text-3xl font-black mb-8 text-gray-800 dark:text-gray-100 tracking-tight">Trading Center</h2>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* LEFT COLUMN: Market Depth & Info (Always Visible) */}
-                <div className="lg:col-span-8 space-y-6">
-                    {/* Market Data Card */}
-                    <div className="bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-600 p-5">
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="flex items-center gap-3">
-                                {selectedStockData && <WatchlistMarker stock={selectedStockData} />}
-                                <div>
-                                    <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase">{selectedStockData?.symbol || '---'}</h2>
-                                    <p className="text-sm font-bold text-gray-400 dark:text-gray-400 uppercase tracking-tighter">{selectedStockData?.name || ''}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-3xl font-black text-blue-600 dark:text-blue-400">
-                                    {order.symbol ? `Rs. ${parseFloat(selectedStockData?.last_price || 0).toLocaleString()}` : '---'}
-                                </p>
-                                <p className={`text-sm font-black ${parseFloat(selectedStockData?.change || 0) > 0
-                                    ? 'text-green-500'
-                                    : parseFloat(selectedStockData?.change || 0) < 0
-                                        ? 'text-red-500'
-                                        : 'text-blue-500'
-                                    }`}>
-                                    {order.symbol && selectedStockData?.change !== undefined ? (
-                                        `${parseFloat(selectedStockData.change || 0) > 0 ? '+' : ''}${parseFloat(selectedStockData.change || 0).toFixed(2)} (${parseFloat(selectedStockData.change_percent || 0).toFixed(2)}%)`
-                                    ) : ''}
-                                </p>
-                            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_260px] gap-6 items-start mb-8">
+                {/* LEFT COLUMN: Main Broker Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+                    {/* Header Phase */}
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Place Order</h2>
+                            <span className={`text-[10px] font-bold uppercase ${isMarketOpen ? 'text-green-500 bg-green-500/10' : 'text-red-500 bg-red-500/10'} px-2 py-0.5 rounded-full flex items-center gap-1.5`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isMarketOpen ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                {isMarketOpen ? 'Live' : 'Closed'}
+                            </span>
                         </div>
-                        <div className="flex justify-between items-end border-t border-gray-100 dark:border-gray-600 pt-4 mt-4">
-                            <div>
-                                <p className="text-gray-400 text-sm font-bold uppercase tracking-tighter">Volume</p>
-                                <p className="text-xl font-black dark:text-gray-200">
-                                    {order.symbol && selectedStockData ? (selectedStockData.total_trade_quantity?.toLocaleString() || '0') : '---'}
-                                </p>
-                            </div>
-                            <div className="text-right">
-                                <div className="flex items-center gap-4">
-                                    <div>
-                                        <span className="text-xs text-gray-400 font-bold uppercase mr-2">Lower:</span>
-                                        <span className="text-lg font-black text-gray-800 dark:text-white">
-                                            {order.symbol && selectedStockData ? selectedStockData.circuit_low : '---'}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="text-xs text-gray-400 font-bold uppercase mr-2">Upper:</span>
-                                        <span className="text-lg font-black text-gray-800 dark:text-white">
-                                            {order.symbol && selectedStockData ? selectedStockData.circuit_high : '---'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    {/* Market Depth Table */}
-                    <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                        <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
-                            <div className="flex items-center gap-2">
-                                <h3 className="font-bold text-gray-900 dark:text-white">Market Depth</h3>
-                                {!isMarketOpen && (
-                                    <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full uppercase">CLOSED</span>
-                                )}
-                            </div>
-                            <button
-                                onClick={() => { /* Auto-polls every 5s */ }}
-                                className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg transition-colors text-gray-500"
-                                title="Auto-refreshing every 5s"
-                            >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                            </button>
-                        </div>
-                        {!isMarketOpen ? (
-                            <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm font-bold">
-                                Market Closed, Depth unavailable
-                            </div>
-                        ) : order.symbol ? (
-                            <div className="grid grid-cols-2 text-xs divide-x divide-gray-100 dark:divide-gray-700">
-                                {/* BUY SIDE */}
-                                <div className="p-4 space-y-2">
-                                    <div className="grid grid-cols-3 text-gray-400 font-bold mb-3 border-b border-gray-100 dark:border-gray-700 pb-2">
-                                        <span>Orders</span>
-                                        <span className="text-center">Qty</span>
-                                        <span className="text-right">Price</span>
-                                    </div>
-                                    {marketDepth?.marketDepth?.buyMarketDepthList?.length > 0 ? (
-                                        marketDepth.marketDepth.buyMarketDepthList.map((row, i) => (
-                                            <div key={i} className="grid grid-cols-3 font-medium cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/10 p-1 rounded" onClick={() => { setOrder({ ...order, price: row.orderBookPrice || 0 }); setMode('buy'); }}>
-                                                <span className="text-green-500 font-bold">{row.orderCount ?? '-'}</span>
-                                                <span className="text-gray-600 dark:text-gray-300 text-center">{row.quantity ?? '-'}</span>
-                                                <span className="text-gray-900 dark:text-white text-right">{row.orderBookPrice != null ? row.orderBookPrice.toFixed(2) : '-'}</span>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-center text-gray-400 py-4 col-span-3">No buy orders</div>
-                                    )}
-                                </div>
+                        {/* Trade Toggle Capsule */}
+                        <div className="flex relative bg-gray-100 dark:bg-gray-900 rounded-full p-1 w-24 border border-gray-200 dark:border-gray-700">
+                            {/* Slider background */}
+                            <div
+                                className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full transition-all duration-300 z-0 shadow-sm ${!mode ? 'opacity-0' : 'opacity-100'
+                                    } ${mode === 'sell' ? 'translate-x-[calc(100%+4px)] bg-red-500' : 'translate-x-0 bg-blue-600'
+                                    }`}
+                            ></div>
 
-                                {/* SELL SIDE */}
-                                <div className="p-4 space-y-2">
-                                    <div className="grid grid-cols-3 text-gray-400 font-bold mb-3 border-b border-gray-100 dark:border-gray-700 pb-2">
-                                        <span>Price</span>
-                                        <span className="text-center">Qty</span>
-                                        <span className="text-right">Orders</span>
-                                    </div>
-                                    {marketDepth?.marketDepth?.sellMarketDepthList?.length > 0 ? (
-                                        marketDepth.marketDepth.sellMarketDepthList.map((row, i) => (
-                                            <div key={i} className="grid grid-cols-3 font-medium cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/10 p-1 rounded" onClick={() => { setOrder({ ...order, price: row.orderBookPrice || 0 }); setMode('sell'); }}>
-                                                <span className="text-gray-900 dark:text-white">{row.orderBookPrice != null ? row.orderBookPrice.toFixed(2) : '-'}</span>
-                                                <span className="text-gray-600 dark:text-gray-300 text-center">{row.quantity ?? '-'}</span>
-                                                <span className="text-red-500 font-bold text-right">{row.orderCount ?? '-'}</span>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-center text-gray-400 py-4 col-span-3">No sell orders</div>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-8 text-center text-gray-400">
-                                <p className="mb-2">Select a stock to view market depth</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* RIGHT COLUMN: Action & Forms */}
-                <div className="lg:col-span-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700 sticky top-24">
-
-                        {/* 1. Mode Selection */}
-                        <div className="p-4 grid grid-cols-2 gap-4">
                             <button
                                 onClick={() => handleModeSelect('buy')}
-                                className={`py-4 rounded-2xl font-black text-lg transition-all transform hover:scale-[1.02] ${mode === 'buy'
-                                    ? 'bg-green-500 text-white shadow-lg shadow-green-500/30'
-                                    : 'bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400'
-                                    }`}
+                                className={`flex-1 relative z-10 py-1 text-xs font-bold transition-colors ${mode === 'buy' ? 'text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                             >
                                 BUY
                             </button>
                             <button
                                 onClick={() => handleModeSelect('sell')}
-                                className={`py-4 rounded-2xl font-black text-lg transition-all transform hover:scale-[1.02] ${mode === 'sell'
-                                    ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-                                    : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400'
-                                    }`}
+                                className={`flex-1 relative z-10 py-1 text-xs font-bold transition-colors ${mode === 'sell' ? 'text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
                             >
                                 SELL
                             </button>
                         </div>
+                    </div>
 
-                        {/* 2. Order Form (Only Visible if Mode Selected) */}
-                        {mode && (
-                            <div className="px-6 pb-6 pt-2 space-y-5 animate-in fade-in slide-in-from-top-4 duration-300">
-                                <div className={`p-3 rounded-xl text-center text-sm font-bold ${mode === 'buy' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                                    You are placing a {mode.toUpperCase()} order
-                                </div>
-
-                                {/* Stock Symbol Search */}
-                                <StockSearchInput
-                                    placeholder="Search e.g. NABIL or Nabil Bank"
-                                    initialValue={order.symbol}
-                                    onSelect={selectStock}
-                                />
-
-                                {/* Order Type */}
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Order Type</label>
-                                    <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
-                                        {['market', 'limit'].map(type => (
-                                            <button
-                                                key={type}
-                                                onClick={() => updateOrder('type', type)}
-                                                className={`flex-1 py-2 rounded-lg text-sm font-bold capitalize transition-all ${order.type === type
-                                                    ? 'bg-white dark:bg-gray-700 shadow text-gray-900 dark:text-white'
-                                                    : 'text-gray-400 hover:text-gray-600'
-                                                    }`}
-                                            >
-                                                {type}
-                                            </button>
-                                        ))}
+                    {/* Form & Actions Phase */}
+                    <div className="p-4">
+                        <div className="animate-in fade-in slide-in-from-top-2">
+                            {/* Row 1: Inputs */}
+                            <div className="grid grid-cols-1 md:grid-cols-[2fr_1.2fr_1.2fr] gap-3 mb-4">
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-bold text-gray-400 uppercase">Scrip</label>
+                                    <div className="relative">
+                                        <StockSearchInput
+                                            placeholder="Type Scrip & Enter"
+                                            initialValue={order.symbol}
+                                            onSelect={selectStock}
+                                            className="!py-1.5 !px-3"
+                                        />
                                     </div>
                                 </div>
-
-                                {/* Quantity */}
-                                <div>
-                                    <div className="flex justify-between mb-1">
-                                        <label className="block text-xs font-bold text-gray-400 uppercase">Quantity</label>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-bold text-gray-400 uppercase flex justify-between">
+                                        Quantity
                                         {mode === 'sell' && order.symbol && (
-                                            <span className="text-xs font-bold text-blue-500">
-                                                Available: {availableQty}
+                                            <span
+                                                className="text-blue-500 cursor-pointer hover:underline"
+                                                onClick={() => updateOrder('qty', availableQty)}
+                                            >
+                                                Max: {availableQty}
                                             </span>
                                         )}
-                                    </div>
-                                    <div className="relative">
-                                        <input
-                                            type="number"
-                                            value={order.qty}
-                                            onChange={(e) => updateOrder('qty', e.target.value)}
-                                            placeholder="0"
-                                            className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl px-4 py-3 font-bold text-gray-800 dark:text-white focus:border-blue-500 outline-none"
-                                        />
-                                        {mode === 'sell' && order.symbol && (
-                                            <button
-                                                onClick={() => updateOrder('qty', availableQty)}
-                                                className="absolute right-2 top-2 px-2 py-1 bg-blue-100 text-blue-600 rounded text-xs font-bold hover:bg-blue-200"
-                                            >
-                                                MAX
-                                            </button>
-                                        )}
-                                    </div>
-                                    {mode === 'sell' && order.qty > availableQty && (
-                                        <p className="text-xs text-red-500 font-bold mt-1">Exceeds available quantity!</p>
-                                    )}
-                                </div>
-
-                                {/* Price */}
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Price</label>
+                                    </label>
                                     <input
                                         type="number"
-                                        value={order.price}
-                                        onChange={(e) => updateOrder('price', e.target.value)}
-                                        disabled={order.type === 'market'}
-                                        className={`w-full border-2 rounded-xl px-4 py-3 font-bold outline-none transition-colors ${order.type === 'market'
-                                            ? 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-400 cursor-not-allowed'
-                                            : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700 text-gray-800 dark:text-white focus:border-blue-500'
-                                            }`}
+                                        value={order.qty}
+                                        onChange={(e) => updateOrder('qty', e.target.value)}
+                                        placeholder="0"
+                                        className="px-3 py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-blue-500 transition-colors placeholder-gray-400"
                                     />
+                                    {mode === 'sell' && order.qty > availableQty && (
+                                        <span className="text-[10px] text-red-500 font-bold absolute -bottom-4">Exceeds available</span>
+                                    )}
+                                </div>
+                                <div className="flex flex-col gap-1.5 md:col-span-1">
+                                    <label className="text-xs font-bold text-gray-400 uppercase">Price</label>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="number"
+                                            value={order.price}
+                                            onChange={(e) => updateOrder('price', e.target.value)}
+                                            disabled={order.type === 'market'}
+                                            placeholder="Price"
+                                            className={`flex-1 px-3 py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none transition-colors placeholder-gray-400 ${order.type === 'market' ? 'opacity-50 cursor-not-allowed' : 'focus:border-blue-500'}`}
+                                        />
+                                        <div className="flex flex-col gap-1.5 shrink-0">
+                                            <label className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="orderType"
+                                                    className="hidden peer"
+                                                    checked={order.type === 'limit'}
+                                                    onChange={() => updateOrder('type', 'limit')}
+                                                />
+                                                <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center peer-checked:border-blue-500 after:content-[''] after:w-1.5 after:h-1.5 after:bg-blue-500 after:rounded-full after:scale-0 peer-checked:after:scale-100 after:transition-transform transition-colors"></div>
+                                                LMT
+                                            </label>
+                                            <label className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="orderType"
+                                                    className="hidden peer"
+                                                    checked={order.type === 'market'}
+                                                    onChange={() => {
+                                                        updateOrder('type', 'market');
+                                                        updateOrder('price', '');
+                                                    }}
+                                                />
+                                                <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center peer-checked:border-blue-500 after:content-[''] after:w-1.5 after:h-1.5 after:bg-blue-500 after:rounded-full after:scale-0 peer-checked:after:scale-100 after:transition-transform transition-colors"></div>
+                                                MKT
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Row 2: Action Row */}
+                            <div className="flex flex-col md:flex-row items-center justify-end pb-4 border-b border-gray-100 dark:border-gray-700 gap-3 mb-4">
+
+                                {/* Info Blocks */}
+                                <div className="flex gap-4">
+                                    <div className="flex flex-col items-center gap-1">
+                                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{mode === 'sell' ? 'Net Receivable' : 'Total Payable'}</span>
+                                        <strong className="text-sm text-gray-900 dark:text-white font-black">
+                                            {calcResult ? `Rs. ${mode === 'sell' ? parseFloat(calcResult.net_receivable).toLocaleString() : parseFloat(calcResult.total_cost).toLocaleString()}` : '0.00'}
+                                        </strong>
+                                    </div>
+                                    <div className="flex flex-col items-center gap-1">
+                                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Avail. Balance</span>
+                                        <strong className="text-sm text-green-600 dark:text-green-400 font-black">
+                                            Rs. {cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </strong>
+                                    </div>
+                                    <div className="flex flex-col items-center gap-1 hidden sm:flex">
+                                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">LTP</span>
+                                        <strong className="text-sm text-gray-900 dark:text-white font-black">
+                                            {LTP ? `Rs. ${LTP.toLocaleString()}` : '---'}
+                                        </strong>
+                                    </div>
                                 </div>
 
-                                {/* CALCULATED SUMMARY */}
-                                {calcResult && (
-                                    <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl space-y-2 border border-dashed border-gray-200 dark:border-gray-700 animate-in fade-in slide-in-from-bottom-2">
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-500">Effective Rate</span>
-                                            <span className="font-bold text-gray-800 dark:text-gray-200">
-                                                Rs. {mode === 'buy' ? parseFloat(calcResult.effective_price).toFixed(2) : parseFloat(calcResult.total_cost_basis / order.qty).toFixed(2)}
-                                            </span>
+                                {/* Action Buttons */}
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => setShowConfirm(true)}
+                                        disabled={calcLoading || !order.symbol || !order.qty || (!order.price && order.type === 'limit') || (mode === 'sell' && order.qty > availableQty) || !mode}
+                                        className={`w-32 py-2 rounded-xl font-bold text-sm text-white shadow-lg transition-transform active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed ${mode === 'sell' ? 'bg-red-500 shadow-red-500/20' : mode === 'buy' ? 'bg-blue-600 shadow-blue-600/20' : 'bg-gray-400 dark:bg-gray-700 shadow-none text-gray-600 dark:text-gray-300'}`}
+                                    >
+                                        {calcLoading ? 'CALCULATING...' : mode ? mode.toUpperCase() : 'SELECT ACTION'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setOrder({ symbol: '', qty: '', price: '', type: 'market' });
+                                            setMode('buy');
+                                        }}
+                                        className="px-6 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                        RESET
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Row 3: Market Depth & Info */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {/* Top 5 Buy Table */}
+                            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden flex flex-col">
+                                <div className="py-1.5 text-center text-[10px] font-black uppercase text-blue-600 bg-blue-50 dark:bg-blue-900/20 tracking-wider">
+                                    Top 5 Buy
+                                </div>
+                                {order.symbol && isMarketOpen && marketDepth?.marketDepth?.buyMarketDepthList ? (
+                                    <table className="w-full text-[11px]">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 dark:border-gray-700 text-gray-400">
+                                                <th className="py-1.5 px-3 text-left font-bold">Orders</th>
+                                                <th className="py-1.5 text-right font-bold">Qty</th>
+                                                <th className="py-1.5 px-3 text-right font-bold">Price</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {marketDepth.marketDepth.buyMarketDepthList.map((row, i) => (
+                                                <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer" onClick={() => { setOrder({ ...order, price: row.orderBookOrderPrice || 0 }); setMode('buy'); }}>
+                                                    <td className="py-1.5 px-3 text-left font-bold text-blue-600">{row.orderCount ?? '-'}</td>
+                                                    <td className="py-1.5 text-right font-medium text-gray-600 dark:text-gray-300">{row.quantity ?? '-'}</td>
+                                                    <td className="py-1.5 px-3 text-right font-medium text-gray-900 dark:text-white">{row.orderBookOrderPrice != null ? row.orderBookOrderPrice.toFixed(2) : '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="bg-gray-50 dark:bg-gray-800 font-bold border-t border-gray-200 dark:border-gray-700 text-blue-600">
+                                                <td className="py-1.5 px-3 text-left">Total Qty</td>
+                                                <td colSpan="2" className="py-1.5 px-3 text-right">
+                                                    {marketDepth.marketDepth.buyMarketDepthList.reduce((acc, row) => acc + (row.quantity || 0), 0)}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                ) : (
+                                    <div className="flex-1 flex items-center justify-center text-[10px] font-bold text-gray-400 p-8">No Data</div>
+                                )}
+                            </div>
+
+                            {/* Top 5 Sell Table */}
+                            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden flex flex-col">
+                                <div className="py-1.5 text-center text-[10px] font-black uppercase text-red-500 bg-red-50 dark:bg-red-900/10 tracking-wider">
+                                    Top 5 Sell
+                                </div>
+                                {order.symbol && isMarketOpen && marketDepth?.marketDepth?.sellMarketDepthList ? (
+                                    <table className="w-full text-[11px]">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 dark:border-gray-700 text-gray-400">
+                                                <th className="py-1.5 px-3 text-left font-bold">Price</th>
+                                                <th className="py-1.5 text-right font-bold">Qty</th>
+                                                <th className="py-1.5 px-3 text-right font-bold">Orders</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {marketDepth.marketDepth.sellMarketDepthList.map((row, i) => (
+                                                <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer" onClick={() => { setOrder({ ...order, price: row.orderBookOrderPrice || 0 }); setMode('sell'); }}>
+                                                    <td className="py-1.5 px-3 text-left font-medium text-gray-900 dark:text-white">{row.orderBookOrderPrice != null ? row.orderBookOrderPrice.toFixed(2) : '-'}</td>
+                                                    <td className="py-1.5 text-right font-medium text-gray-600 dark:text-gray-300">{row.quantity ?? '-'}</td>
+                                                    <td className="py-1.5 px-3 text-right font-bold text-red-500">{row.orderCount ?? '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="bg-gray-50 dark:bg-gray-800 font-bold border-t border-gray-200 dark:border-gray-700 text-red-500">
+                                                <td className="py-1.5 px-3 text-left">Total Qty</td>
+                                                <td colSpan="2" className="py-1.5 px-3 text-right">
+                                                    {marketDepth.marketDepth.sellMarketDepthList.reduce((acc, row) => acc + (row.quantity || 0), 0)}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                ) : (
+                                    <div className="flex-1 flex items-center justify-center text-[10px] font-bold text-gray-400 p-8">No Data</div>
+                                )}
+                            </div>
+
+                            {/* Stock Information List */}
+                            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden flex flex-col">
+                                <div className="py-1.5 text-center text-[10px] font-black uppercase text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 tracking-wider">
+                                    Stock Information
+                                </div>
+                                {order.symbol && selectedStockData ? (
+                                    <ul className="flex flex-col flex-1 pb-1">
+                                        {[
+                                            { label: 'D.High', value: selectedStockData.high_price },
+                                            { label: 'D.Low', value: selectedStockData.low_price },
+                                            { label: 'P.Close', value: selectedStockData.previous_close },
+                                            { label: 'Volume', value: selectedStockData.total_trade_quantity?.toLocaleString() },
+                                            { label: 'Turnover', value: selectedStockData.total_trade_value ? `Rs. ${(selectedStockData.total_trade_value / 1000000).toFixed(1)}M` : '-' },
+                                        ].map((item, idx) => (
+                                            <li key={idx} className={`flex justify-between items-center px-4 py-2 text-xs border-b border-gray-100 dark:border-gray-700 last:border-0`}>
+                                                <span className="text-gray-500 font-bold">{item.label}</span>
+                                                <strong className="text-gray-900 dark:text-white font-black">{item.value || '-'}</strong>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <div className="flex-1 flex items-center justify-center text-[10px] font-bold text-gray-400 p-8">No Data</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* RIGHT COLUMN: Watchlist */}
+                <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden sticky top-24">
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+                        <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <i className="fas fa-list text-blue-500"></i> Watchlist
+                        </h2>
+                        {wlSelectedGroup && (
+                            <div className="relative" ref={wlSearchRef}>
+                                <button
+                                    onClick={() => { setWlShowSearch(!wlShowSearch); if (!wlShowSearch) setTimeout(() => document.getElementById('wl-trading-search')?.focus(), 100); }}
+                                    className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-[10px] font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                >
+                                    <i className="fas fa-plus text-[8px]"></i> Add
+                                </button>
+                                {wlShowSearch && (
+                                    <div className="absolute right-0 top-full mt-2 w-60 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
+                                        <div className="p-2 border-b border-gray-100 dark:border-gray-700">
+                                            <input
+                                                id="wl-trading-search"
+                                                type="text"
+                                                value={wlSearchQuery}
+                                                onChange={(e) => wlHandleSearch(e.target.value)}
+                                                placeholder="Search symbol..."
+                                                className="w-full px-3 py-1.5 bg-gray-100 dark:bg-gray-900 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                                autoComplete="off"
+                                            />
                                         </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-gray-500 font-bold">{mode === 'buy' ? 'Total Payable' : 'Net Receivable'}</span>
-                                            <span className={`text-xl font-black ${mode === 'buy' ? 'text-blue-600' : 'text-green-600'}`}>
-                                                Rs. {mode === 'buy'
-                                                    ? parseFloat(calcResult.total_cost).toLocaleString()
-                                                    : parseFloat(calcResult.net_receivable).toLocaleString()
-                                                }
-                                            </span>
+                                        <div className="max-h-48 overflow-y-auto">
+                                            {wlSearchLoading ? (
+                                                <div className="p-3 text-center text-[10px] text-gray-400">Searching...</div>
+                                            ) : wlSearchQuery.length < 2 ? (
+                                                <div className="p-3 text-center text-[10px] text-gray-400">Type 2+ chars</div>
+                                            ) : wlSearchResults.length === 0 ? (
+                                                <div className="p-3 text-center text-[10px] text-gray-400">No results</div>
+                                            ) : (
+                                                wlSearchResults.map(s => (
+                                                    <button
+                                                        key={s.id}
+                                                        onClick={() => wlHandleAdd(s)}
+                                                        className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-50 dark:border-gray-700/50 last:border-0 flex justify-between items-center group"
+                                                    >
+                                                        <div>
+                                                            <span className="block font-bold text-gray-800 dark:text-white text-xs">{s.symbol}</span>
+                                                            <span className="block text-[10px] text-gray-500 truncate max-w-[120px]">{s.name}</span>
+                                                        </div>
+                                                        <span className="text-blue-600 opacity-0 group-hover:opacity-100 text-[10px] font-bold">+ ADD</span>
+                                                    </button>
+                                                ))
+                                            )}
                                         </div>
                                     </div>
                                 )}
-
-                                {calcLoading && (
-                                    <div className="text-center text-xs text-gray-400 animate-pulse">Calculating taxes & fees...</div>
-                                )}
-
-                                {/* Submit */}
-                                <button
-                                    onClick={() => setShowConfirm(true)}
-                                    disabled={
-                                        calcLoading || // Disable while calculating
-                                        !order.symbol ||
-                                        !order.qty ||
-                                        (!order.price && order.type === 'limit') ||
-                                        (mode === 'sell' && order.qty > availableQty)
-                                    }
-                                    className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed ${mode === 'buy' ? 'bg-green-500 shadow-green-500/30' : 'bg-red-500 shadow-red-500/30'
-                                        }`}
-                                >
-                                    {calcLoading ? 'Calculating...' : `Place ${mode.toUpperCase()} Order`}
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Default Info State */}
-                        {!mode && (
-                            <div className="p-8 text-center text-gray-400">
-                                <p className="text-4xl mb-4">👆</p>
-                                <p className="font-bold">Select Buy or Sell to start trading.</p>
                             </div>
                         )}
                     </div>
-                </div>
 
-                {/* ORDERS SECTION */}
-                <div className="lg:col-span-12 mt-12 bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                    <div className="flex border-b border-gray-100 dark:border-gray-700">
-                        <button
-                            onClick={() => setOrdersTab('active')}
-                            className={`px-8 py-4 font-bold text-sm uppercase tracking-wider transition-colors ${ordersTab === 'active'
-                                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-500 dark:bg-blue-900/20 dark:text-blue-400'
-                                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            Active Orders ({activeOrders.length})
-                        </button>
-                        <button
-                            onClick={() => setOrdersTab('history')}
-                            className={`px-8 py-4 font-bold text-sm uppercase tracking-wider transition-colors ${ordersTab === 'history'
-                                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-500 dark:bg-blue-900/20 dark:text-blue-400'
-                                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            Order History
-                        </button>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="text-xs font-bold text-gray-400 uppercase border-b border-gray-100 dark:border-gray-700">
-                                    <th className="pb-4 pl-4 pt-4">Date</th>
-                                    <th className="pb-4 pt-4">
-                                        <select
-                                            value={filterType}
-                                            onChange={(e) => setFilterType(e.target.value)}
-                                            className="bg-transparent uppercase font-bold outline-none cursor-pointer hover:text-blue-500 tracking-wider"
-                                            style={{ appearance: 'none' }} // Optional: minimalist style
-                                        >
-                                            <option value="all">Type</option>
-                                            <option value="buy">BUY</option>
-                                            <option value="sell">SELL</option>
-                                        </select>
-                                        {/* Optional: Add a small icon if desired, or rely on hover */}
-                                        <span className="ml-1 text-[10px]">▼</span>
-                                    </th>
-                                    <th className="pb-4 pt-4">Stock</th>
-                                    <th className="pb-4 text-right pt-4">Qty</th>
-                                    <th className="pb-4 text-right pt-4">Price</th>
-                                    <th className="pb-4 text-right pt-4">Net Amt</th>
-                                    <th className="pb-4 text-right pt-4">
-                                        {ordersTab === 'history' ? (
-                                            <div className="flex justify-end items-center gap-1">
-                                                <select
-                                                    value={filterStatus}
-                                                    onChange={(e) => setFilterStatus(e.target.value)}
-                                                    className="bg-transparent uppercase font-bold outline-none cursor-pointer hover:text-blue-500 text-right tracking-wider"
-                                                    style={{ appearance: 'none', textAlignLast: 'right' }}
-                                                >
-                                                    <option value="all">Status</option>
-                                                    <option value="executed">EXECUTED</option>
-                                                    <option value="cancelled">CANCELLED</option>
-                                                </select>
-                                                <span className="text-[10px]">▼</span>
-                                            </div>
-                                        ) : (
-                                            'Status'
-                                        )}
-                                    </th>
-                                    {ordersTab === 'active' && <th className="pb-4 text-right pt-4 pr-4">Action</th>}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {loadingOrders ? (
-                                    <tr>
-                                        <td colSpan="8" className="text-center py-8 text-gray-400">
-                                            Loading orders...
-                                        </td>
-                                    </tr>
-                                ) : paginatedOrders.length > 0 ? (
-                                    paginatedOrders.map((o) => (
-                                        <tr key={o.id} className="border-b border-dashed border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
-                                            <td className="py-4 pl-4 text-sm font-medium text-gray-500">
-                                                {new Date(o.created_at).toLocaleString()}
-                                            </td>
-                                            <td className="py-4">
-                                                <span className={`text-xs font-bold px-2 py-1 rounded ${o.order_type === 'BUY'
-                                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                                    }`}>
-                                                    {o.order_type}
-                                                </span>
-                                            </td>
-                                            <td className="py-4 font-bold text-gray-800 dark:text-white">{o.stock_symbol}</td>
-                                            <td className="py-4 text-right font-medium text-gray-600 dark:text-gray-300">{o.quantity}</td>
-                                            <td className="py-4 text-right font-bold text-gray-800 dark:text-white">
-                                                Rs. {o.price ? parseFloat(o.price).toLocaleString() : 'MKT'}
-                                            </td>
-                                            <td className="py-4 text-right font-medium text-gray-600 dark:text-gray-300">
-                                                Rs. {(calculateEstimatedNet(o) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </td>
-                                            <td className="py-4 text-right">
-                                                <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${o.status === 'EXECUTED' ? 'bg-blue-100 text-blue-600' :
-                                                    o.status === 'PENDING' ? 'bg-yellow-100 text-yellow-600' :
-                                                        o.status === 'CANCELLED' ? 'bg-gray-100 text-gray-600' :
-                                                            'bg-red-100 text-red-600'
-                                                    }`}>
-                                                    {o.status}
-                                                </span>
-                                            </td>
-                                            {ordersTab === 'active' && (
-                                                <td className="py-4 text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        <button
-                                                            onClick={() => handleEditOrder(o)}
-                                                            className="text-xs font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                                        >
-                                                            Edit
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleCancelOrder(o)}
-                                                            className="text-xs font-bold text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            )}
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan="8" className="py-8 text-center text-gray-400 italic">
-                                            No {ordersTab} orders found.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Pagination Controls */}
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between px-6 py-4 bg-gray-50 dark:bg-gray-900/30 border-t border-gray-100 dark:border-gray-700">
-                            <div className="text-sm text-gray-500 font-medium">
-                                Showing <span className="font-bold dark:text-gray-300">{startIndex + 1}</span> to <span className="font-bold dark:text-gray-300">{Math.min(startIndex + pageSize, displayedOrders.length)}</span> of <span className="font-bold dark:text-gray-300">{displayedOrders.length}</span> results
-                            </div>
-                            <div className="flex gap-2">
+                    {/* Group Tabs */}
+                    {wlGroups.length > 1 && (
+                        <div className="flex gap-1 p-2 overflow-x-auto border-b border-gray-100 dark:border-gray-700 bg-gray-50/30 dark:bg-gray-900/20">
+                            {wlGroups.map((group) => (
                                 <button
-                                    onClick={() => handlePageChange(currentPage - 1)}
-                                    disabled={currentPage === 1}
-                                    className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${currentPage === 1
-                                        ? 'text-gray-300 cursor-not-allowed bg-gray-100 dark:bg-gray-800'
-                                        : 'text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
+                                    key={group.id}
+                                    onClick={() => { setWlSelectedGroup(group); fetchWatchlistItems(group.id); }}
+                                    className={`px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition-all ${wlSelectedGroup?.id === group.id
+                                        ? 'bg-blue-600 text-white'
+                                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                                         }`}
                                 >
-                                    Previous
+                                    {group.name}
                                 </button>
-                                <div className="flex items-center gap-1 px-2">
-                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                                        <button
-                                            key={p}
-                                            onClick={() => handlePageChange(p)}
-                                            className={`w-8 h-8 text-xs font-bold rounded-lg transition-all ${currentPage === p
-                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30'
-                                                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
-                                                }`}
-                                        >
-                                            {p}
-                                        </button>
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={() => handlePageChange(currentPage + 1)}
-                                    disabled={currentPage === totalPages}
-                                    className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${currentPage === totalPages
-                                        ? 'text-gray-300 cursor-not-allowed bg-gray-100 dark:bg-gray-800'
-                                        : 'text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
-                                        }`}
-                                >
-                                    Next
-                                </button>
-                            </div>
+                            ))}
                         </div>
                     )}
+
+                    <div className="flex flex-col">
+                        {wlLoading ? (
+                            <div className="p-6 text-center text-xs text-gray-400">Loading...</div>
+                        ) : wlGroups.length === 0 ? (
+                            <div className="p-6 text-center">
+                                <p className="text-xs text-gray-400">No watchlists yet.</p>
+                                <p className="text-[10px] text-gray-400 mt-1">Create one from the Dashboard.</p>
+                            </div>
+                        ) : wlItems.length === 0 ? (
+                            <div className="p-6 text-center">
+                                <p className="text-xs text-gray-400">No stocks in "{wlSelectedGroup?.name}"</p>
+                            </div>
+                        ) : (
+                            wlItems.map((item) => {
+                                const stock = item.stock_details;
+                                if (!stock) return null;
+                                const changePct = parseFloat(stock.change_percent || 0);
+                                return (
+                                    <div
+                                        key={item.id}
+                                        className="flex justify-between items-center p-3 border-b border-gray-100 dark:border-gray-700 cursor-pointer hover:bg-blue-50/50 dark:hover:bg-gray-700/50 transition-colors last:border-b-0 group"
+                                        onClick={() => selectStock({ symbol: stock.symbol })}
+                                    >
+                                        <div className="flex flex-col">
+                                            <strong className="text-sm font-bold text-gray-900 dark:text-white">{stock.symbol}</strong>
+                                            <span className="text-[10px] text-gray-500 truncate max-w-[120px]">{stock.name}</span>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            <strong className="text-sm font-bold text-gray-900 dark:text-white">{parseFloat(stock.last_price || 0).toLocaleString()}</strong>
+                                            <span className={`text-[10px] font-bold ${changePct > 0 ? 'text-green-500' : changePct < 0 ? 'text-red-500' : 'text-gray-500'}`}>
+                                                {changePct > 0 ? '+' : ''}{changePct.toFixed(2)}%
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={(e) => wlHandleRemove(e, item.id)}
+                                            className="ml-1 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                                            title="Remove"
+                                        >
+                                            <i className="fas fa-times text-[10px]"></i>
+                                        </button>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* ORDERS SECTION */}
+            <div className="lg:col-span-12 mt-12 bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div className="flex border-b border-gray-100 dark:border-gray-700">
+                    <button
+                        onClick={() => setOrdersTab('active')}
+                        className={`px-8 py-4 font-bold text-sm uppercase tracking-wider transition-colors ${ordersTab === 'active'
+                            ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-500 dark:bg-blue-900/20 dark:text-blue-400'
+                            : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                            }`}
+                    >
+                        Active Orders ({activeOrders.length})
+                    </button>
+                    <button
+                        onClick={() => setOrdersTab('history')}
+                        className={`px-8 py-4 font-bold text-sm uppercase tracking-wider transition-colors ${ordersTab === 'history'
+                            ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-500 dark:bg-blue-900/20 dark:text-blue-400'
+                            : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                            }`}
+                    >
+                        Order History
+                    </button>
                 </div>
 
-            </div >
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="text-xs font-bold text-gray-400 uppercase border-b border-gray-100 dark:border-gray-700">
+                                <th className="pb-4 pl-4 pt-4">Date</th>
+                                <th className="pb-4 pt-4">
+                                    <select
+                                        value={filterType}
+                                        onChange={(e) => setFilterType(e.target.value)}
+                                        className="bg-transparent uppercase font-bold outline-none cursor-pointer hover:text-blue-500 tracking-wider"
+                                        style={{ appearance: 'none' }} // Optional: minimalist style
+                                    >
+                                        <option value="all">Type</option>
+                                        <option value="buy">BUY</option>
+                                        <option value="sell">SELL</option>
+                                    </select>
+                                    {/* Optional: Add a small icon if desired, or rely on hover */}
+                                    <span className="ml-1 text-[10px]">▼</span>
+                                </th>
+                                <th className="pb-4 pt-4">Stock</th>
+                                <th className="pb-4 text-right pt-4">Qty</th>
+                                <th className="pb-4 text-right pt-4">Price</th>
+                                <th className="pb-4 text-right pt-4">Net Amt</th>
+                                <th className="pb-4 text-right pt-4">
+                                    {ordersTab === 'history' ? (
+                                        <div className="flex justify-end items-center gap-1">
+                                            <select
+                                                value={filterStatus}
+                                                onChange={(e) => setFilterStatus(e.target.value)}
+                                                className="bg-transparent uppercase font-bold outline-none cursor-pointer hover:text-blue-500 text-right tracking-wider"
+                                                style={{ appearance: 'none', textAlignLast: 'right' }}
+                                            >
+                                                <option value="all">Status</option>
+                                                <option value="executed">EXECUTED</option>
+                                                <option value="cancelled">CANCELLED</option>
+                                            </select>
+                                            <span className="text-[10px]">▼</span>
+                                        </div>
+                                    ) : (
+                                        'Status'
+                                    )}
+                                </th>
+                                {ordersTab === 'active' && <th className="pb-4 text-right pt-4 pr-4">Action</th>}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loadingOrders ? (
+                                <tr>
+                                    <td colSpan="8" className="text-center py-8 text-gray-400">
+                                        Loading orders...
+                                    </td>
+                                </tr>
+                            ) : paginatedOrders.length > 0 ? (
+                                paginatedOrders.map((o) => (
+                                    <tr key={o.id} className="border-b border-dashed border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+                                        <td className="py-4 pl-4 text-sm font-medium text-gray-500">
+                                            {new Date(o.created_at).toLocaleString()}
+                                        </td>
+                                        <td className="py-4">
+                                            <span className={`text-xs font-bold px-2 py-1 rounded ${o.order_type === 'BUY'
+                                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                }`}>
+                                                {o.order_type}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 font-bold text-gray-800 dark:text-white">{o.stock_symbol}</td>
+                                        <td className="py-4 text-right font-medium text-gray-600 dark:text-gray-300">{o.quantity}</td>
+                                        <td className="py-4 text-right font-bold text-gray-800 dark:text-white">
+                                            Rs. {o.price ? parseFloat(o.price).toLocaleString() : 'MKT'}
+                                        </td>
+                                        <td className="py-4 text-right font-medium text-gray-600 dark:text-gray-300">
+                                            Rs. {(calculateEstimatedNet(o) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                        <td className="py-4 text-right">
+                                            <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${o.status === 'EXECUTED' ? 'bg-blue-100 text-blue-600' :
+                                                o.status === 'PENDING' ? 'bg-yellow-100 text-yellow-600' :
+                                                    o.status === 'CANCELLED' ? 'bg-gray-100 text-gray-600' :
+                                                        'bg-red-100 text-red-600'
+                                                }`}>
+                                                {o.status}
+                                            </span>
+                                        </td>
+                                        {ordersTab === 'active' && (
+                                            <td className="py-4 text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleEditOrder(o)}
+                                                        className="text-xs font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleCancelOrder(o)}
+                                                        className="text-xs font-bold text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        )}
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="8" className="py-8 text-center text-gray-400 italic">
+                                        No {ordersTab} orders found.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-6 py-4 bg-gray-50 dark:bg-gray-900/30 border-t border-gray-100 dark:border-gray-700">
+                        <div className="text-sm text-gray-500 font-medium">
+                            Showing <span className="font-bold dark:text-gray-300">{startIndex + 1}</span> to <span className="font-bold dark:text-gray-300">{Math.min(startIndex + pageSize, displayedOrders.length)}</span> of <span className="font-bold dark:text-gray-300">{displayedOrders.length}</span> results
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${currentPage === 1
+                                    ? 'text-gray-300 cursor-not-allowed bg-gray-100 dark:bg-gray-800'
+                                    : 'text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
+                                    }`}
+                            >
+                                Previous
+                            </button>
+                            <div className="flex items-center gap-1 px-2">
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                                    <button
+                                        key={p}
+                                        onClick={() => handlePageChange(p)}
+                                        className={`w-8 h-8 text-xs font-bold rounded-lg transition-all ${currentPage === p
+                                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30'
+                                            : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                                            }`}
+                                    >
+                                        {p}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${currentPage === totalPages
+                                    ? 'text-gray-300 cursor-not-allowed bg-gray-100 dark:bg-gray-800'
+                                    : 'text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
+                                    }`}
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {/* Confirmation Modal */}
             {

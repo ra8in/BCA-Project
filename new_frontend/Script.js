@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebar = document.getElementById('sidebar');
     const sidebarToggle = document.getElementById('sidebar-toggle');
     const themeToggle = document.getElementById('theme-toggle');
-    const settingThemeToggle = document.querySelector('.setting-theme-toggle');
+    const settingsThemeToggle = document.getElementById('settings-theme-toggle');
     const navItems = document.querySelectorAll('.nav-item[data-section]');
     const sectionTitle = document.getElementById('section-title');
     const contentSections = document.querySelectorAll('.content-section');
@@ -13,16 +13,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const isMobile = window.innerWidth <= 768;
         if (isMobile) {
             sidebar.classList.toggle('open');
-            // Remove collapsed class if it was set on desktop
             sidebar.classList.remove('collapsed');
         } else {
             sidebar.classList.toggle('collapsed');
-            // Remove open class if it was set on mobile
             sidebar.classList.remove('open');
         }
     });
 
-    // Close sidebar on mobile when clicking outside or on a link
+    // Close sidebar on mobile when clicking outside
     document.addEventListener('click', (e) => {
         const isMobile = window.innerWidth <= 768;
         if (isMobile && sidebar.classList.contains('open')) {
@@ -32,12 +30,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Theme Switching
+    // =============================================
+    // Theme Switching (synced: sidebar + settings)
+    // =============================================
     const applyTheme = (theme) => {
         document.body.className = theme;
         localStorage.setItem('theme', theme);
         themeToggle.checked = theme === 'dark-mode';
-        if (settingThemeToggle) settingThemeToggle.checked = theme === 'dark-mode';
+        if (settingsThemeToggle) settingsThemeToggle.checked = theme === 'dark-mode';
     };
 
     const savedTheme = localStorage.getItem('theme') || 'light-mode';
@@ -47,15 +47,104 @@ document.addEventListener('DOMContentLoaded', () => {
         applyTheme(themeToggle.checked ? 'dark-mode' : 'light-mode');
     });
 
-    if (settingThemeToggle) {
-        settingThemeToggle.addEventListener('change', () => {
-            applyTheme(settingThemeToggle.checked ? 'dark-mode' : 'light-mode');
+    if (settingsThemeToggle) {
+        settingsThemeToggle.addEventListener('change', () => {
+            applyTheme(settingsThemeToggle.checked ? 'dark-mode' : 'light-mode');
         });
     }
 
+    // =============================================
+    // Accent Color Picker
+    // =============================================
+    const colorPicker = document.getElementById('accent-color-picker');
+    if (colorPicker) {
+        const savedAccent = localStorage.getItem('accentColor');
+        if (savedAccent) {
+            document.documentElement.style.setProperty('--accent-blue', savedAccent);
+            colorPicker.querySelectorAll('.color-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.color === savedAccent);
+            });
+        }
+
+        colorPicker.addEventListener('click', (e) => {
+            const option = e.target.closest('.color-option');
+            if (!option) return;
+
+            const color = option.dataset.color;
+            document.documentElement.style.setProperty('--accent-blue', color);
+            localStorage.setItem('accentColor', color);
+
+            colorPicker.querySelectorAll('.color-option').forEach(o => o.classList.remove('active'));
+            option.classList.add('active');
+        });
+    }
+
+    // =============================================
+    // Profile Edit Toggle
+    // =============================================
+    const editProfileBtn = document.getElementById('btn-edit-profile');
+    if (editProfileBtn) {
+        let isEditing = false;
+        editProfileBtn.addEventListener('click', () => {
+            isEditing = !isEditing;
+            const editableFields = document.querySelectorAll('.profile-editable');
+            editableFields.forEach(field => {
+                field.contentEditable = isEditing ? 'true' : 'false';
+            });
+            editProfileBtn.innerHTML = isEditing
+                ? '<i class="fas fa-save"></i> Save Profile'
+                : '<i class="fas fa-edit"></i> Edit Profile';
+
+            if (isEditing && editableFields.length > 0) {
+                editableFields[0].focus();
+            }
+        });
+    }
+
+    // =============================================
+    // Trading Broker Action Toggle
+    // =============================================
+    const capsuleToggle = document.getElementById('trade-capsule');
+    if (capsuleToggle) {
+        const btnSell = capsuleToggle.querySelector('.sell');
+        const btnBuy = capsuleToggle.querySelector('.buy');
+        const slider = capsuleToggle.querySelector('.capsule-slider');
+        const actionBtn = document.getElementById('btn-broker-action');
+
+        btnSell.addEventListener('click', () => {
+            btnSell.classList.add('active');
+            btnBuy.classList.remove('active');
+            slider.style.transform = 'translateX(0)';
+            slider.style.backgroundColor = 'var(--accent-red)';
+
+            if (actionBtn) {
+                actionBtn.textContent = 'SELL';
+                actionBtn.classList.remove('buy');
+                actionBtn.classList.add('sell');
+            }
+        });
+
+        btnBuy.addEventListener('click', () => {
+            btnBuy.classList.add('active');
+            btnSell.classList.remove('active');
+            slider.style.transform = 'translateX(100%)';
+            slider.style.backgroundColor = 'var(--accent-blue)';
+
+            if (actionBtn) {
+                actionBtn.textContent = 'BUY';
+                actionBtn.classList.remove('sell');
+                actionBtn.classList.add('buy');
+            }
+        });
+
+        // Initialize position
+        slider.style.transform = 'translateX(100%)';
+    }
+
+    // =============================================
     // Section Switching Logic
+    // =============================================
     function switchToSection(sectionId) {
-        // Update Active Nav Item
         navItems.forEach(i => {
             i.classList.remove('active');
             if (i.getAttribute('data-section') === sectionId) {
@@ -64,7 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Show Relevant Section
         contentSections.forEach(section => {
             section.classList.remove('active');
             if (section.id === sectionId) {
@@ -72,12 +160,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Close sidebar on mobile after navigating
         if (window.innerWidth <= 768) {
             sidebar.classList.remove('open');
         }
 
-        // Scroll to top
         window.scrollTo(0, 0);
     }
 
@@ -100,7 +186,6 @@ document.addEventListener('DOMContentLoaded', () => {
             profileDropdown.classList.toggle('show');
         });
 
-        // Close dropdown when clicking outside
         document.addEventListener('click', (e) => {
             if (!profileTrigger.contains(e.target)) {
                 profileTrigger.classList.remove('active');
@@ -108,7 +193,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Dropdown Items Click (Switch Sections)
         const dropdownItems = profileDropdown.querySelectorAll('.dropdown-item[data-section]');
         dropdownItems.forEach(item => {
             item.addEventListener('click', (e) => {
@@ -125,10 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const symbolEl = e.target.closest('.symbol-code');
         if (symbolEl) {
             const symbol = symbolEl.textContent;
-            // In a real app, we'd fetch data here. For now, we show the hardcoded ACLBSL section.
             switchToSection('stock-detail');
-
-            // Update section title correctly
             sectionTitle.textContent = `${symbol} Details`;
         }
 
@@ -137,7 +218,6 @@ document.addEventListener('DOMContentLoaded', () => {
             switchToSection('trading');
             const symbol = document.querySelector('.stock-symbol-title').textContent;
 
-            // Auto-select in trading page
             const tradeSelect = document.getElementById('trade-symbol');
             if (tradeSelect) {
                 for (let option of tradeSelect.options) {
@@ -160,7 +240,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const symbol = symbolEl.textContent;
             switchToSection('trading');
 
-            // Auto-select symbol
             const tradeSelect = document.getElementById('trade-symbol');
             if (tradeSelect) {
                 for (let option of tradeSelect.options) {
@@ -173,7 +252,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // =============================================
     // Improved Calculator Logic
+    // =============================================
     const calcBtn = document.getElementById('perform-calc');
     const calcTabs = document.querySelectorAll('.calc-tab');
     const sellFields = document.getElementById('sell-fields');
@@ -186,7 +267,6 @@ document.addEventListener('DOMContentLoaded', () => {
             tab.classList.add('active');
             currentCalcType = tab.dataset.type;
 
-            // Toggle visibility of sell-specific fields
             if (currentCalcType === 'sell') {
                 sellFields.style.display = 'block';
                 sellResultsOnly.style.display = 'block';

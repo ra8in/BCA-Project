@@ -1,3 +1,27 @@
+# Dependencies (re-installed in container)
 node_modules/
+
+# Build output
 dist/
+
+# Environment
+.env
 .env.local
+.env.*.local
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Docker (avoid recursive copy)
+Dockerfile
+.dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Docs
+*.md

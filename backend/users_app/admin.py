@@ -42,3 +42,33 @@ class CustomUserAdmin(UserAdmin):
         total = result['total'] or Decimal('0')
         return f"Rs. {total:,.2f}"
     total_realized_pl.short_description = 'Realized P/L'
+
+from .models import MoneyRequest
+
+@admin.register(MoneyRequest)
+class MoneyRequestAdmin(admin.ModelAdmin):
+    list_display = ('user', 'amount', 'status', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('user__username', 'reason')
+    readonly_fields = ('user', 'amount', 'reason', 'created_at')
+
+    def get_readonly_fields(self, request, obj=None):
+        """Lock all fields (including status) once a request is finalized."""
+        readonly = list(self.readonly_fields)
+        if obj and obj.status in ('Approved', 'Rejected'):
+            readonly.append('status')
+        return readonly
+
+    def save_model(self, request, obj, form, change):
+        if change and 'status' in form.changed_data:
+            initial_status = form.initial.get('status')
+            # Block changes from finalized states (should already be prevented by readonly)
+            if initial_status in ('Approved', 'Rejected'):
+                return  # Do nothing — status is locked
+            # Only process Pending → Approved transition
+            if obj.status == 'Approved':
+                obj.user.virtual_balance += obj.amount
+                obj.user.save()
+            # Pending → Rejected: no balance change needed
+        super().save_model(request, obj, form, change)
+

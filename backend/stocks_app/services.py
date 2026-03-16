@@ -207,15 +207,31 @@ def fetch_market_data() -> dict:
         
         stock_prices = {}
         
-        # A. Fetch Traded Stocks (Today Price)
+        # A. Fetch Traded Stocks (Today Price) — with pagination
+        # size=500 per page. If totalPages > 1, fetch remaining pages automatically.
+        # NOTE: size>500 causes 401 from the NEPSE API — do NOT increase
         try:
-            url = f"{nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500"
-            payload_id = nepse._get_floorsheet_payload_id(0, datetime.now())
-            payload = {"id": payload_id}
-
-            response = _nepse_request('post', url, json=payload)  # auto-refreshes on 401
-            data = response.json()
-            stocks_raw = data.get('content', data) if isinstance(data, dict) else data
+            stocks_raw = []
+            page = 0
+            total_pages = 1  # will be updated from first response
+            
+            while page < total_pages:
+                url = f"{nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500&page={page}"
+                payload_id = nepse._get_floorsheet_payload_id(0, datetime.now())
+                payload = {"id": payload_id}
+                response = _nepse_request('post', url, json=payload)
+                data = response.json()
+                
+                if isinstance(data, dict):
+                    stocks_raw.extend(data.get('content', []))
+                    total_pages = data.get('totalPages', 1)
+                elif isinstance(data, list):
+                    stocks_raw.extend(data)
+                    break  # No pagination metadata in list response
+                
+                page += 1
+            
+            logger.info(f"Fetched {len(stocks_raw)} stocks from today-price ({total_pages} page(s))")
         except Exception as e:
             logger.warning(f"Failed to fetch today-price: {e}")
             stocks_raw = nepse.get_stocks()
@@ -602,18 +618,77 @@ def _refresh_global_stock_cache() -> dict:
     if market_state == "CLOSED":
         logger.info("Market is CLOSED. Skipping NEPSE API calls — serving DB prices.")
         ttl = MARKET_CLOSED_TTL
+        
+        # Build a true previous_close map from StockPrice history.
+        # The Stock.previous_close field gets overwritten by the EOD job
+        # (set to closing_price), so we derive the REAL previous close
+        # from the second-most-recent StockPrice record.
+        from stocks_app.models import StockPrice
+        
+        prev_close_map = {}  # {symbol: actual_previous_close}
+        
+        # Efficient: fetch the 2 most recent close prices per stock in one query
+        # Group by stock, get the two latest dates
+        from django.db.models import Max
+        
+        # Step 1: Get all recent StockPrice records (last 2 per stock)
+        # We use a raw-ish approach: fetch ALL recent prices, then pick per stock
+        recent_prices = StockPrice.objects.filter(
+            stock__is_active=True
+        ).select_related('stock').order_by('stock__symbol', '-timestamp').values_list(
+            'stock__symbol', 'close', 'timestamp'
+        )
+        
+        # Group by symbol, keep only the 2 most recent
+        from itertools import groupby
+        from operator import itemgetter
+        
+        current_sym = None
+        sym_prices = []
+        for sym, close_val, ts in recent_prices:
+            if sym != current_sym:
+                if current_sym and len(sym_prices) >= 2:
+                    prev_close_map[current_sym] = sym_prices[1]  # second most recent = previous close
+                elif current_sym and len(sym_prices) == 1:
+                    prev_close_map[current_sym] = sym_prices[0]  # only one record
+                current_sym = sym
+                sym_prices = [close_val]
+            else:
+                if len(sym_prices) < 2:
+                    sym_prices.append(close_val)
+        # Don't forget the last group
+        if current_sym and len(sym_prices) >= 2:
+            prev_close_map[current_sym] = sym_prices[1]
+        elif current_sym and len(sym_prices) == 1:
+            prev_close_map[current_sym] = sym_prices[0]
+        
         db_stocks = Stock.objects.filter(is_active=True)
         for stock in db_stocks:
+            ltp = stock.last_price or Decimal('0')
+            
+            # Use true previous close from history, fallback to DB field
+            true_prev_close = prev_close_map.get(stock.symbol, stock.previous_close)
+            if true_prev_close is None:
+                true_prev_close = Decimal('0')
+            
+            # Recompute change from true values
+            if ltp > 0 and true_prev_close > 0:
+                change = round(ltp - true_prev_close, 2)
+                change_percent = round(float(change) / float(true_prev_close) * 100, 2)
+            else:
+                change = Decimal('0')
+                change_percent = 0.0
+            
             formatted = {
                 'symbol': stock.symbol,
-                'ltp': stock.last_price,
-                'change': stock.change,
-                'change_percent': stock.change_percent,
-                'open': stock.open_price or stock.last_price,
-                'high': stock.high_price or stock.last_price,
-                'low': stock.low_price or stock.last_price,
+                'ltp': ltp,
+                'change': change,
+                'change_percent': change_percent,
+                'open': stock.open_price or ltp,
+                'high': stock.high_price or ltp,
+                'low': stock.low_price or ltp,
                 'volume': stock.total_trade_quantity,
-                'previous_close': stock.previous_close,
+                'previous_close': true_prev_close,
                 'turnover': stock.total_traded_value,
                 'last_updated': None,
                 'source': 'database',
@@ -623,26 +698,69 @@ def _refresh_global_stock_cache() -> dict:
         logger.info(f"CLOSED mode: Cached {len(results)} stocks from DB with {ttl}s TTL.")
         return results
 
-    # === PHASE 2: Bulk-fetch from today-price ===
-    # Use singleton + _nepse_request() which auto-refreshes WASM token on 401.
-    # Do NOT create a new Nepse() per call — that floods NEPSE auth endpoint → RemoteDisconnected.
+    # === PHASE 2: Bulk-fetch from today-price (PAGINATED) ===
+    # One NEPSE API call populates the shared server-side cache for ALL users.
+    # size=500 per page. If totalPages > 1, automatically fetches all pages.
+    # NOTE: size>500 causes 401 from the API — do NOT increase.
+    # 5 retries with exponential backoff per page since this is the CORE data source.
+    # If all retries fail, fall back to nepse.get_stocks() as last resort.
     today_price_symbols = set()
     try:
         phase2_nepse = _get_nepse_client()
-        url = f"{phase2_nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500"
-        payload_id = phase2_nepse._get_floorsheet_payload_id(0, datetime.now())
-        payload = {"id": payload_id}
+        
+        all_prices = []
+        page = 0
+        total_pages = 1  # updated from first response
+        
+        while page < total_pages:
+            url = f"{phase2_nepse.BASE_URL}/api/nots/nepse-data/today-price?size=500&page={page}"
+            payload_id = phase2_nepse._get_floorsheet_payload_id(0, datetime.now())
+            payload = {"id": payload_id}
 
-        response = _nepse_request('post', url, json=payload)  # auto-refreshes on 401
-        data = response.json()
-
-        prices = []
-        if isinstance(data, dict) and 'content' in data:
-            prices = data['content']
-        elif isinstance(data, list):
-            prices = data
-
-        logger.info(f"Phase 2: today-price returned {len(prices)} stocks.")
+            page_data = None
+            last_error = None
+            for attempt in range(5):
+                try:
+                    response = _nepse_request('post', url, json=payload)
+                    resp_json = response.json()
+                    if resp_json:
+                        page_data = resp_json
+                        if attempt > 0:
+                            logger.info(f"today-price page {page} succeeded on attempt {attempt+1}/5")
+                        break
+                    logger.warning(f"today-price page {page} returned empty (attempt {attempt+1}/5). Retrying...")
+                except Exception as attempt_err:
+                    last_error = attempt_err
+                    wait = min(2 ** attempt, 10)
+                    logger.warning(f"today-price page {page} attempt {attempt+1}/5 failed: {attempt_err}. Waiting {wait}s...")
+                    time.sleep(wait)
+            
+            if page_data is None:
+                logger.error(f"today-price page {page} failed after 5 attempts (last: {last_error})")
+                break
+            
+            if isinstance(page_data, dict):
+                all_prices.extend(page_data.get('content', []))
+                total_pages = page_data.get('totalPages', 1)
+            elif isinstance(page_data, list):
+                all_prices.extend(page_data)
+                break  # No pagination in list response
+            
+            page += 1
+        
+        # Final fallback if we got nothing
+        if not all_prices:
+            logger.error(f"today-price returned 0 stocks. Falling back to get_stocks()...")
+            try:
+                fallback_stocks = phase2_nepse.get_stocks()
+                if fallback_stocks:
+                    all_prices = fallback_stocks
+                    logger.info(f"get_stocks() fallback returned {len(all_prices)} stocks")
+            except Exception as fb_err:
+                logger.error(f"get_stocks() fallback also failed: {fb_err}")
+        
+        prices = all_prices
+        logger.info(f"Phase 2: today-price returned {len(prices)} stocks ({total_pages} page(s)).")
 
         # Build previous_close map from our own StockPrice table (source of truth)
         from stocks_app.models import StockPrice
@@ -691,19 +809,56 @@ def _refresh_global_stock_cache() -> dict:
     if missing_symbols:
         logger.info(f"Phase 3: {len(missing_symbols)} active symbols not in today-price. Falling back to DB.")
         ttl = _get_cache_ttl()
+        
+        # Build prev_close from StockPrice history for missing stocks (single query)
+        from stocks_app.models import StockPrice
+        prev_close_map_ph3 = {}
+        recent_ph3 = StockPrice.objects.filter(
+            stock__symbol__in=missing_symbols
+        ).order_by('stock__symbol', '-timestamp').values_list(
+            'stock__symbol', 'close'
+        )
+        cur_sym = None
+        cur_prices = []
+        for sym, close_val in recent_ph3:
+            if sym != cur_sym:
+                if cur_sym and len(cur_prices) >= 2:
+                    prev_close_map_ph3[cur_sym] = cur_prices[1]
+                elif cur_sym and len(cur_prices) == 1:
+                    prev_close_map_ph3[cur_sym] = cur_prices[0]
+                cur_sym = sym
+                cur_prices = [close_val]
+            else:
+                if len(cur_prices) < 2:
+                    cur_prices.append(close_val)
+        if cur_sym and len(cur_prices) >= 2:
+            prev_close_map_ph3[cur_sym] = cur_prices[1]
+        elif cur_sym and len(cur_prices) == 1:
+            prev_close_map_ph3[cur_sym] = cur_prices[0]
+        
         db_stocks = Stock.objects.filter(symbol__in=missing_symbols)
         for stock in db_stocks:
             s_symbol = stock.symbol
+            ltp = stock.last_price or Decimal('0')
+            true_prev = prev_close_map_ph3.get(s_symbol, stock.previous_close) or Decimal('0')
+            
+            if ltp > 0 and true_prev > 0:
+                change = round(ltp - true_prev, 2)
+                change_pct = round(float(change) / float(true_prev) * 100, 2)
+            else:
+                change = Decimal('0')
+                change_pct = 0.0
+            
             formatted = {
                 'symbol': s_symbol,
-                'ltp': stock.last_price,
-                'change': stock.change,
-                'change_percent': stock.change_percent,
-                'open': stock.open_price or stock.last_price,
-                'high': stock.high_price or stock.last_price,
-                'low': stock.low_price or stock.last_price,
+                'ltp': ltp,
+                'change': change,
+                'change_percent': change_pct,
+                'open': stock.open_price or ltp,
+                'high': stock.high_price or ltp,
+                'low': stock.low_price or ltp,
                 'volume': stock.total_trade_quantity,
-                'previous_close': stock.previous_close,
+                'previous_close': true_prev,
                 'turnover': stock.total_traded_value,
                 'last_updated': None,
                 'source': 'database',

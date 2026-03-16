@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { stockService } from '../../services/stockService';
 import WatchlistWidget from '../../components/dashboard/WatchlistWidget';
 import TurnoverWidget from '../../components/dashboard/TurnoverWidget';
+import { useAuth } from '../../context/AuthContext';
 
 
 const Dashboard = () => {
+    const { user, isAuthenticated } = useAuth();
 
     const [topGainers, setTopGainers] = useState([]);
     const [topLosers, setTopLosers] = useState([]);
@@ -63,10 +65,10 @@ const Dashboard = () => {
             <td className="py-3 font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">{stock.symbol}</td>
             <td className="py-3 font-medium dark:text-white whitespace-nowrap">Rs. {parseFloat(stock.last_price).toLocaleString()}</td>
             <td className={`py-3 font-bold whitespace-nowrap text-right ${parseFloat(stock.change_percent) > 0
-                    ? 'text-green-500'
-                    : parseFloat(stock.change_percent) < 0
-                        ? 'text-red-500'
-                        : 'text-blue-500'
+                ? 'text-green-500'
+                : parseFloat(stock.change_percent) < 0
+                    ? 'text-red-500'
+                    : 'text-blue-500'
                 }`}>
                 {parseFloat(stock.change || 0).toFixed(1)} ({parseFloat(stock.change_percent).toFixed(1)}%)
             </td>
@@ -90,9 +92,13 @@ const Dashboard = () => {
     );
 
     return (
-        <div>
-
-            <h2 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">Market Overview</h2>
+        <div className="space-y-8">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-2">
+                <div>
+                    <h2 className="text-3xl font-black text-gray-900 dark:text-gray-100 tracking-tight">Market Overview</h2>
+                    <p className="text-gray-500 dark:text-gray-400 font-medium">Real-time snapshots of the NEPSE market performance.</p>
+                </div>
+            </div>
 
 
 

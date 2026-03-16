@@ -51,16 +51,31 @@ class StockDetailView(APIView):
 
 
 class StockListView(APIView):
+    """
+    Return all active stocks with LIVE prices from the shared server-side cache.
+    The cache is populated once by _refresh_global_stock_cache() via NEPSE today-price API.
+    All users get the same cached data — no per-user API calls to NEPSE.
+    Falls back to DB if cache is cold.
+    """
     def get(self, request):
+        from stocks_app.services import get_all_cached_stock_prices
         sector_id = request.query_params.get('sector')
-        stocks = Stock.objects.filter(is_active=True)
-        
+
+        # Get all stocks from shared live cache (one NEPSE fetch, all users benefit)
+        all_stocks = get_all_cached_stock_prices()
+
+        # Apply sector filter in Python (cache holds all stocks)
         if sector_id:
-            stocks = stocks.filter(sector_id=sector_id)
-        
-        stocks = stocks.order_by('symbol')
-        serializer = StockSerializer(stocks, many=True)
-        return Response(serializer.data)
+            try:
+                sector_id_int = int(sector_id)
+                all_stocks = [s for s in all_stocks if s.get('sector') == sector_id_int]
+            except (ValueError, TypeError):
+                pass
+
+        # Sort by symbol (consistent with old behaviour)
+        all_stocks.sort(key=lambda s: s.get('symbol', ''))
+
+        return Response(all_stocks)
 
 
 class SectorListView(APIView):

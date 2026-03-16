@@ -37,7 +37,7 @@ const MarketRibbon = () => {
     if (!nepseIndex) return null;
 
     return (
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center gap-4 sticky top-0 z-50 shadow-sm mb-0 overflow-x-auto scrollbar-hide whitespace-nowrap">
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center gap-4 sticky top-14 z-30 shadow-sm mb-0 overflow-x-auto scrollbar-hide whitespace-nowrap">
             <div className="flex-shrink-0">
                 <TickerItem label="NEPSE" data={nepseIndex} />
             </div>

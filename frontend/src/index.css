@@ -32,8 +32,8 @@ body {
   min-height: 100vh;
 }
 
-/* Force font on everything */
-* {
+/* Force font on everything except FontAwesome icons */
+*:not(.fa):not(.fas):not(.far):not(.fal):not(.fad):not(.fab) {
   font-family: 'BrownStd', sans-serif !important;
 }
 

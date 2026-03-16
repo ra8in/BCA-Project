@@ -1,6 +1,13 @@
+# ─────────────────────────────────────────────
+# BCA Project – Docker Compose
+# Paper Trading System with NEPSE Data
+# ─────────────────────────────────────────────
+
 services:
+  # ── PostgreSQL Database ──────────────────────
   db:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: paper_trading_db
       POSTGRES_USER: postgres
@@ -14,29 +21,40 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
 
+  # ── Redis Cache ──────────────────────────────
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - app-network
 
+  # ── Django Backend ───────────────────────────
   backend:
     build:
       context: ./backend
-    command: bash /app/entrypoint.sh
+      target: production
+    restart: unless-stopped
     volumes:
       - ./backend:/app
-      - ./frontend/dist:/frontend/dist
+      - backend_static:/app/staticfiles
+      - backend_media:/app/media
     ports:
       - "8000:8000"
+    env_file:
+      - ./backend/.env.docker
     environment:
-      - DEBUG=True
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-docker-dev-key-change-in-production}
       - DATABASE_URL=postgres://postgres:postgres@db:5432/paper_trading_db
       - REDIS_URL=redis://redis:6379/0
     depends_on:
@@ -44,10 +62,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - app-network
 
+  # ── React + Vite Frontend ───────────────────
   frontend:
     build:
       context: ./frontend
+      target: development
+    restart: unless-stopped
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -57,6 +80,15 @@ services:
       - PROXY_TARGET=http://backend:8000
     depends_on:
       - backend
+    networks:
+      - app-network
 
 volumes:
   postgres_data:
+  redis_data:
+  backend_static:
+  backend_media:
+
+networks:
+  app-network:
+    driver: bridge

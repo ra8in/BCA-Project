@@ -21,6 +21,8 @@ import MarketMovers from './pages/MarketMovers/MarketMovers';
 import StockDetail from './pages/StockDetail/StockDetail';
 import StockHistory from './pages/Portfolio/StockHistory';
 import PortfolioHistory from './pages/Portfolio/PortfolioHistory';
+import Profile from './pages/Profile/Profile';
+import Settings from './pages/Settings/Settings';
 import NotFound from './pages/NotFound/NotFound';
 
 function App() {
@@ -31,8 +33,8 @@ function App() {
           <UserProvider>
             <Routes>
               {/* Auth Routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
+              <Route path="/login" element={<Layout><Login /></Layout>} />
+              <Route path="/register" element={<Layout><Register /></Layout>} />
 
               {/* Public Routes - Accessible without login (with limited features) */}
               <Route path="/" element={<Layout><Dashboard /></Layout>} />
@@ -70,6 +72,16 @@ function App() {
               <Route path="/trading/:symbol" element={
                 <ProtectedRoute>
                   <Layout><Trading /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/profile" element={
+                <ProtectedRoute>
+                  <Layout><Profile /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/settings" element={
+                <ProtectedRoute>
+                  <Layout><Settings /></Layout>
                 </ProtectedRoute>
               } />
 
