@@ -11,6 +11,7 @@ import logging
 from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import Q as models_Q
 from django.core.cache import cache
 import time
 
@@ -586,6 +587,103 @@ def _sync_new_companies(new_symbols: set):
         logger.error(f"Failed to sync new companies {new_symbols}: {e}")
 
 
+def ensure_previous_close_snapshot():
+    """
+    Called once at startup (or once per trading day).
+    Ensures Stock.previous_close is populated from NEPSE API
+    for all active stocks that are missing it.
+
+    Idempotent: skips if already done today (flag in Redis).
+    """
+    from stocks_app.models import Stock
+    from datetime import date, datetime
+
+    today_str = date.today().isoformat()
+    flag_key = f"previous_close_snapshot_done:{today_str}"
+
+    if cache.get(flag_key):
+        logger.info("Previous close snapshot: already done today. Skipping.")
+        return
+
+    # Count how many active stocks are missing previous_close
+    total_active = Stock.objects.filter(is_active=True).count()
+    missing_count = Stock.objects.filter(
+        is_active=True, previous_close__isnull=True
+    ).count()
+    zero_count = Stock.objects.filter(
+        is_active=True, previous_close=Decimal('0')
+    ).count()
+    needs_fill = missing_count + zero_count
+
+    if needs_fill == 0:
+        logger.info(
+            f"Previous close snapshot: all {total_active} stocks already have "
+            f"previous_close. Marking done."
+        )
+        cache.set(flag_key, True, 86400)  # 24 hours
+        return
+
+    logger.info(
+        f"Previous close snapshot: {needs_fill}/{total_active} stocks missing "
+        f"previous_close (NULL={missing_count}, zero={zero_count}). "
+        f"Fetching from NEPSE..."
+    )
+
+    try:
+        nepse = _get_nepse_client()
+        all_prices = []
+        page, total_pages = 0, 1
+
+        while page < total_pages:
+            url = (
+                f"{nepse.BASE_URL}/api/nots/nepse-data/today-price"
+                f"?size=500&page={page}"
+            )
+            payload_id = nepse._get_floorsheet_payload_id(0, datetime.now())
+            response = _nepse_request('post', url, json={"id": payload_id})
+            page_data = response.json()
+
+            if isinstance(page_data, dict):
+                all_prices.extend(page_data.get('content', []))
+                total_pages = page_data.get('totalPages', 1)
+            elif isinstance(page_data, list):
+                all_prices.extend(page_data)
+                break
+            page += 1
+
+        # Build update map: symbol → previousDayClosePrice
+        prev_map = {}
+        for item in all_prices:
+            sym = item.get('symbol')
+            prev = (
+                item.get('previousDayClosePrice')
+                or item.get('previousClose')
+            )
+            if sym and prev:
+                prev_map[sym] = safe_decimal(prev)
+
+        # Bulk update stocks where previous_close is NULL or 0
+        updated = 0
+        stocks_to_fix = Stock.objects.filter(is_active=True).filter(
+            models_Q(previous_close__isnull=True) | models_Q(previous_close=Decimal('0'))
+        )
+        for stock in stocks_to_fix:
+            if stock.symbol in prev_map:
+                stock.previous_close = prev_map[stock.symbol]
+                stock.save(update_fields=['previous_close'])
+                updated += 1
+
+        logger.info(
+            f"Previous close snapshot: updated {updated} stocks from NEPSE API."
+        )
+        cache.set(flag_key, True, 86400)  # Mark done for today
+
+    except Exception as e:
+        logger.error(
+            f"Previous close snapshot failed: {e}. Will retry on next startup."
+        )
+
+
 def _refresh_global_stock_cache() -> dict:
     """
     3-Phase global stock cache refresh:
@@ -619,62 +717,17 @@ def _refresh_global_stock_cache() -> dict:
         logger.info("Market is CLOSED. Skipping NEPSE API calls — serving DB prices.")
         ttl = MARKET_CLOSED_TTL
         
-        # Build a true previous_close map from StockPrice history.
-        # The Stock.previous_close field gets overwritten by the EOD job
-        # (set to closing_price), so we derive the REAL previous close
-        # from the second-most-recent StockPrice record.
-        from stocks_app.models import StockPrice
-        
-        prev_close_map = {}  # {symbol: actual_previous_close}
-        
-        # Efficient: fetch the 2 most recent close prices per stock in one query
-        # Group by stock, get the two latest dates
-        from django.db.models import Max
-        
-        # Step 1: Get all recent StockPrice records (last 2 per stock)
-        # We use a raw-ish approach: fetch ALL recent prices, then pick per stock
-        recent_prices = StockPrice.objects.filter(
-            stock__is_active=True
-        ).select_related('stock').order_by('stock__symbol', '-timestamp').values_list(
-            'stock__symbol', 'close', 'timestamp'
-        )
-        
-        # Group by symbol, keep only the 2 most recent
-        from itertools import groupby
-        from operator import itemgetter
-        
-        current_sym = None
-        sym_prices = []
-        for sym, close_val, ts in recent_prices:
-            if sym != current_sym:
-                if current_sym and len(sym_prices) >= 2:
-                    prev_close_map[current_sym] = sym_prices[1]  # second most recent = previous close
-                elif current_sym and len(sym_prices) == 1:
-                    prev_close_map[current_sym] = sym_prices[0]  # only one record
-                current_sym = sym
-                sym_prices = [close_val]
-            else:
-                if len(sym_prices) < 2:
-                    sym_prices.append(close_val)
-        # Don't forget the last group
-        if current_sym and len(sym_prices) >= 2:
-            prev_close_map[current_sym] = sym_prices[1]
-        elif current_sym and len(sym_prices) == 1:
-            prev_close_map[current_sym] = sym_prices[0]
-        
+        # Stock.previous_close is the source of truth — set by the 4:30 PM EOD job
+        # or by ensure_previous_close_snapshot() at startup.
         db_stocks = Stock.objects.filter(is_active=True)
         for stock in db_stocks:
             ltp = stock.last_price or Decimal('0')
-            
-            # Use true previous close from history, fallback to DB field
-            true_prev_close = prev_close_map.get(stock.symbol, stock.previous_close)
-            if true_prev_close is None:
-                true_prev_close = Decimal('0')
+            prev_close = stock.previous_close or Decimal('0')
             
             # Recompute change from true values
-            if ltp > 0 and true_prev_close > 0:
-                change = round(ltp - true_prev_close, 2)
-                change_percent = round(float(change) / float(true_prev_close) * 100, 2)
+            if ltp > 0 and prev_close > 0:
+                change = round(ltp - prev_close, 2)
+                change_percent = round(float(change) / float(prev_close) * 100, 2)
             else:
                 change = Decimal('0')
                 change_percent = 0.0
@@ -688,7 +741,7 @@ def _refresh_global_stock_cache() -> dict:
                 'high': stock.high_price or ltp,
                 'low': stock.low_price or ltp,
                 'volume': stock.total_trade_quantity,
-                'previous_close': true_prev_close,
+                'previous_close': prev_close,
                 'turnover': stock.total_traded_value,
                 'last_updated': None,
                 'source': 'database',
@@ -762,28 +815,16 @@ def _refresh_global_stock_cache() -> dict:
         prices = all_prices
         logger.info(f"Phase 2: today-price returned {len(prices)} stocks ({total_pages} page(s)).")
 
-        # Build previous_close map from our own StockPrice table (source of truth)
-        from stocks_app.models import StockPrice
-        from django.db.models import Max, Subquery, OuterRef
-        
-        prev_close_map = {}  # {symbol: close_price}
-        # Get the latest StockPrice close for each active stock
-        latest_prices = StockPrice.objects.filter(
-            stock__is_active=True
-        ).values('stock__symbol').annotate(
-            latest_date=Max('timestamp')
-        )
-        for entry in latest_prices:
-            sym = entry['stock__symbol']
-            latest = StockPrice.objects.filter(
-                stock__symbol=sym,
-                timestamp=entry['latest_date']
-            ).values_list('close', flat=True).first()
-            if latest:
-                prev_close_map[sym] = latest
+        # Build previous_close map from Stock table (source of truth)
+        # Stock.previous_close is set by the EOD job or ensure_previous_close_snapshot()
+        prev_close_map = {
+            s['symbol']: s['previous_close']
+            for s in Stock.objects.filter(is_active=True).values('symbol', 'previous_close')
+            if s['previous_close']
+        }
         
         if prev_close_map:
-            logger.info(f"Phase 2: Built prev_close map from DB for {len(prev_close_map)} stocks.")
+            logger.info(f"Phase 2: Built prev_close map from Stock.previous_close for {len(prev_close_map)} stocks.")
 
         ttl = _get_cache_ttl()
         for stock_data in prices:
@@ -810,37 +851,12 @@ def _refresh_global_stock_cache() -> dict:
         logger.info(f"Phase 3: {len(missing_symbols)} active symbols not in today-price. Falling back to DB.")
         ttl = _get_cache_ttl()
         
-        # Build prev_close from StockPrice history for missing stocks (single query)
-        from stocks_app.models import StockPrice
-        prev_close_map_ph3 = {}
-        recent_ph3 = StockPrice.objects.filter(
-            stock__symbol__in=missing_symbols
-        ).order_by('stock__symbol', '-timestamp').values_list(
-            'stock__symbol', 'close'
-        )
-        cur_sym = None
-        cur_prices = []
-        for sym, close_val in recent_ph3:
-            if sym != cur_sym:
-                if cur_sym and len(cur_prices) >= 2:
-                    prev_close_map_ph3[cur_sym] = cur_prices[1]
-                elif cur_sym and len(cur_prices) == 1:
-                    prev_close_map_ph3[cur_sym] = cur_prices[0]
-                cur_sym = sym
-                cur_prices = [close_val]
-            else:
-                if len(cur_prices) < 2:
-                    cur_prices.append(close_val)
-        if cur_sym and len(cur_prices) >= 2:
-            prev_close_map_ph3[cur_sym] = cur_prices[1]
-        elif cur_sym and len(cur_prices) == 1:
-            prev_close_map_ph3[cur_sym] = cur_prices[0]
-        
+        # Use Stock.previous_close directly (source of truth)
         db_stocks = Stock.objects.filter(symbol__in=missing_symbols)
         for stock in db_stocks:
             s_symbol = stock.symbol
             ltp = stock.last_price or Decimal('0')
-            true_prev = prev_close_map_ph3.get(s_symbol, stock.previous_close) or Decimal('0')
+            true_prev = stock.previous_close or Decimal('0')
             
             if ltp > 0 and true_prev > 0:
                 change = round(ltp - true_prev, 2)

@@ -226,6 +226,15 @@ def delayed_catchup_check():
     """
     import time
     time.sleep(3)  # Wait 3 seconds for Django to fully initialize
+
+    # NEW: Ensure previous_close is populated before any cache request
+    print("🔄 Ensuring Stock.previous_close is populated...")
+    try:
+        from stocks_app.services import ensure_previous_close_snapshot
+        ensure_previous_close_snapshot()
+    except Exception as e:
+        print(f"❌ Previous close snapshot error: {e}")
+
     print("🔄 Running catch-up check...")
     try:
         check_missed_eod_update()

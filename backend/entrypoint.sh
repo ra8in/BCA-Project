@@ -61,9 +61,24 @@ else:
     print("Superuser already exists")
 END
 
-# Seed LIVE data from NEPSE API on startup
-echo "Syncing company data, prices, and indices from NEPSE..."
-python manage.py sync_companies || echo "⚠️  Sync failed - continuing anyway (market may be closed)"
+# Smart startup: Only run full sync on FIRST deployment (empty DB).
+# On restarts, the scheduler handles catchup (ensure_previous_close_snapshot + EOD check).
+# To force a re-sync manually: docker exec <container> python manage.py sync_companies
+echo "Checking if initial data sync is needed..."
+python -c "
+import django; import os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'paper_trading_project.settings')
+django.setup()
+from stocks_app.models import Stock
+count = Stock.objects.filter(is_active=True).count()
+print(f'Active stocks in DB: {count}')
+exit(0 if count > 0 else 1)
+" && {
+    echo "✅ DB already has stock data. Skipping sync_companies (scheduler handles updates)."
+} || {
+    echo "🔄 First-time setup: syncing companies, prices & indices from NEPSE..."
+    python manage.py sync_companies || echo "⚠️  Sync failed - continuing anyway (market may be closed)"
+}
 
 # Start server based on DEBUG mode
 DEBUG_MODE="${DEBUG:-True}"
