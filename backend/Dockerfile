@@ -1,57 +1,48 @@
-# ─────────────────────────────────────────────
-# BCA Project – Django Backend
-# ─────────────────────────────────────────────
-FROM python:3.12-slim AS base
+FROM python:3.12-slim
 
-# Prevent Python from writing .pyc files and enable unbuffered stdout/stderr
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+# Prevent Python from writing .pyc files and enable unbuffered output
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# ── Stage 1: Build dependencies ──────────────
-FROM base AS builder
-
-# Install build-time system dependencies (gcc for C extensions, libpq-dev for psycopg2)
+# Install system dependencies for psycopg2 and Pillow (libjpeg-dev, zlib1g-dev)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
     libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
-
-# ── Stage 2: Production image ────────────────
-FROM base AS production
-
-LABEL maintainer="rabin" \
-      project="bca-paper-trading" \
-      description="Django backend for NEPSE Paper Trading System"
-
-# Install only the runtime library for PostgreSQL (no compiler needed)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
+    gcc \
     curl \
+    libjpeg-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --create-home appuser
 
 WORKDIR /app
 
-# Copy pre-built Python packages from builder stage
-COPY --from=builder /install /usr/local
+# Install Python dependencies (cached layer — only re-runs when requirements change)
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy application source code
+# Copy application code
 COPY . .
 
-# Ensure entrypoint is executable and required directories exist
-RUN chmod +x /app/entrypoint.sh \
-    && mkdir -p /app/staticfiles /app/media
+# Make entrypoint script executable
+RUN chmod +x /app/entrypoint.sh
 
-# Expose Django server port
+# Create media directory and set ownership
+RUN mkdir -p /app/media /app/staticfiles && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose Django port
 EXPOSE 8000
 
-# Health check – verify the API is responsive
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD curl -fs http://localhost:8000/api/stocks/ || exit 1
+# Health check — verify Django responds
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/api/ || exit 1
 
-# Entrypoint handles: DB wait → migrations → superuser → NEPSE sync → runserver
+# Entrypoint handles migrations, superuser, and data sync
 ENTRYPOINT ["/app/entrypoint.sh"]

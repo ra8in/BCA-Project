@@ -1,10 +1,4 @@
-# ─────────────────────────────────────────────
-# BCA Project – Docker Compose
-# Paper Trading System with NEPSE Data
-# ─────────────────────────────────────────────
-
 services:
-  # ── PostgreSQL Database ──────────────────────
   db:
     image: postgres:15-alpine
     restart: unless-stopped
@@ -24,14 +18,13 @@ services:
     networks:
       - app-network
 
-  # ── Redis Cache ──────────────────────────────
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -40,23 +33,23 @@ services:
     networks:
       - app-network
 
-  # ── Django Backend ───────────────────────────
   backend:
     build:
       context: ./backend
-      target: production
     restart: unless-stopped
     volumes:
       - ./backend:/app
-      - backend_static:/app/staticfiles
+      - ./frontend/dist:/frontend/dist
       - backend_media:/app/media
+      - backend_static:/app/staticfiles
     ports:
       - "8000:8000"
-    env_file:
-      - ./backend/.env.docker
     environment:
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-docker-dev-key-change-in-production}
       - DATABASE_URL=postgres://postgres:postgres@db:5432/paper_trading_db
       - REDIS_URL=redis://redis:6379/0
+      - DJANGO_SETTINGS_MODULE=paper_trading_project.settings
     depends_on:
       db:
         condition: service_healthy
@@ -65,11 +58,9 @@ services:
     networks:
       - app-network
 
-  # ── React + Vite Frontend ───────────────────
   frontend:
     build:
       context: ./frontend
-      target: development
     restart: unless-stopped
     volumes:
       - ./frontend:/app
@@ -86,8 +77,8 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  backend_static:
   backend_media:
+  backend_static:
 
 networks:
   app-network:

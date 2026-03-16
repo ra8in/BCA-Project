@@ -16,7 +16,6 @@ media/
 .env
 *.env
 !.env.example
-!.env.docker
 
 # Node
 node_modules/

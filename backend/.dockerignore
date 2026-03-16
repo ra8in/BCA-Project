@@ -3,38 +3,38 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 *.egg-info/
+.eggs/
 
-# Environment & secrets
+# Environment
 .env
 .env.*
+!.env.example
 
 # Database
 db.sqlite3
+db_backup.json
 
-# IDE & OS
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-
-# Docker (avoid recursive copy)
-Dockerfile
-docker-compose.yml
-.dockerignore
-
-# Static & media (generated at runtime)
+# Django
 staticfiles/
 media/
 
-# Git
+# Version Control
 .git/
 .gitignore
 .gitattributes
 
-# Docs & misc
-docs/
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs & Scripts (not needed in container)
 *.md
-*.docx
-*.pdf
+verify_*.py
+w.txt

@@ -1,19 +1,37 @@
-asgiref==3.11.0
-certifi==2026.1.4
-charset-normalizer==3.4.4
+# Django Core
 Django==6.0.1
-django-apscheduler==0.7.0
+djangorestframework==3.16.1
+djangorestframework_simplejwt==5.5.1
 django-cors-headers==4.9.0
 django-environ==0.12.0
 django-redis==5.4.0
-djangorestframework==3.16.1
-djangorestframework_simplejwt==5.5.1
-idna==3.11
-nepse-data-api>=1.0.0
+django-apscheduler==0.7.0
+
+# Database
 psycopg2-binary==2.9.11
+
+# Cache
+redis==5.2.1
+
+# NEPSE Data
+nepse-data-api==1.0.0.1
+
+# Image Processing
+Pillow==12.1.1
+
+# Production Server
+gunicorn==25.1.0
+whitenoise==6.12.0
+
+# Utilities
+requests==2.32.5
 PyJWT==2.10.1
 pytz==2024.2
-redis==5.2.1
-requests==2.32.5
+
+# Implicit deps (pinned for reproducibility)
+asgiref==3.11.0
+certifi==2026.1.4
+charset-normalizer==3.4.4
+idna==3.11
 sqlparse==0.5.5
 urllib3==2.6.3

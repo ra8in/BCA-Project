@@ -65,5 +65,19 @@ END
 echo "Syncing company data, prices, and indices from NEPSE..."
 python manage.py sync_companies || echo "⚠️  Sync failed - continuing anyway (market may be closed)"
 
-echo "=== Starting Django server ==="
-exec python manage.py runserver 0.0.0.0:8000
+# Start server based on DEBUG mode
+DEBUG_MODE="${DEBUG:-True}"
+echo "=== Starting server (DEBUG=$DEBUG_MODE) ==="
+
+if [ "$DEBUG_MODE" = "False" ] || [ "$DEBUG_MODE" = "false" ] || [ "$DEBUG_MODE" = "0" ]; then
+    echo "Starting Gunicorn (production mode)..."
+    exec gunicorn paper_trading_project.wsgi:application \
+        --bind 0.0.0.0:8000 \
+        --workers 3 \
+        --timeout 120 \
+        --access-logfile - \
+        --error-logfile -
+else
+    echo "Starting Django runserver (development mode)..."
+    exec python manage.py runserver 0.0.0.0:8000
+fi
