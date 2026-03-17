@@ -41,8 +41,8 @@ USER appuser
 EXPOSE 8000
 
 # Health check — verify Django responds
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/ || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/api/stocks/market-status/ || exit 1
 
 # Entrypoint handles migrations, superuser, and data sync
 ENTRYPOINT ["/app/entrypoint.sh"]
