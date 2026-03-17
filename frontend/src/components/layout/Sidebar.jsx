@@ -76,7 +76,9 @@ const Sidebar = ({ collapsed, onToggle }) => {
                     <i className="fas fa-bars"></i>
                 </button>
                 {!collapsed && (
-                    <img src={logo} alt="Nepse Paper Trading Logo" className="h-8 object-contain" />
+                    <Link to="/" className="flex items-center">
+                        <img src={logo} alt="Nepse Paper Trading Logo" className="h-8 object-contain" />
+                    </Link>
                 )}
             </div>
 
