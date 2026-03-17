@@ -1,6 +1,24 @@
 @import "tailwindcss";
 
 /* ================================================
+   TAILWIND v4 THEME — Primary Color Scale (Purple)
+   ================================================ */
+@theme {
+  /* Primary = Muted purple palette (softer on dark bg) */
+  --color-primary-50: #f8f4ff;
+  --color-primary-100: #ede5fb;
+  --color-primary-200: #d9cbf7;
+  --color-primary-300: #bfa3ee;
+  --color-primary-400: #a87de2;
+  --color-primary-500: #9660d0;
+  --color-primary-600: #7f45b8;
+  --color-primary-700: #6a35a0;
+  --color-primary-800: #572a85;
+  --color-primary-900: #46226d;
+  --color-primary-950: #2a1240;
+}
+
+/* ================================================
    THEME CUSTOM PROPERTIES — Light & Dark
    ================================================ */
 :root {
