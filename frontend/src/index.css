@@ -1,5 +1,42 @@
 @import "tailwindcss";
 
+/* ================================================
+   THEME CUSTOM PROPERTIES — Light & Dark
+   ================================================ */
+:root {
+  /* Purple Accent — #C388F7 */
+  --accent: #C388F7;
+  --accent-hover: #b070f0;
+  --accent-light: rgba(195, 136, 247, 0.12);
+  --accent-ring: rgba(195, 136, 247, 0.25);
+
+  /* Light theme surfaces */
+  --bg: #F8F9FA;
+  --surface: #FFFFFF;
+  --surface-2: #F2F2F2;
+  --border: #E5E5E5;
+
+  /* Light theme text */
+  --text-primary: #0F0F0F;
+  --text-secondary: #606060;
+
+  /* Dark theme configured via .dark class below */
+}
+
+.dark {
+  --bg: #0F0F0F;
+  --surface: #1E1E1E;
+  --surface-2: #272727;
+  --border: #2F2F2F;
+  --text-primary: #FFFFFF;
+  --text-secondary: #AAAAAA;
+}
+
+/* ================================================
+   TAILWIND v4 — Dark mode via .dark on <html>
+   ================================================ */
+@variant dark (&:is(.dark, .dark *));
+
 @font-face {
   font-family: 'BrownStd';
   src: url('./assets/fonts/BrownStd-Regular.otf') format('opentype');
@@ -25,6 +62,7 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
 
 body {
   margin: 0;

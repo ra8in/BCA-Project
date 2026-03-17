@@ -601,7 +601,7 @@ const Trading = () => {
                                 {/* Slider background */}
                                 <div
                                     className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full transition-all duration-300 z-0 shadow-sm ${!mode ? 'opacity-0' : 'opacity-100'
-                                        } ${mode === 'sell' ? 'translate-x-[calc(100%+4px)] bg-red-500' : 'translate-x-0 bg-blue-600'
+                                        } ${mode === 'sell' ? 'translate-x-[calc(100%+4px)] bg-red-500' : 'translate-x-0 bg-primary-600'
                                         }`}
                                 ></div>
 
@@ -666,7 +666,7 @@ const Trading = () => {
                                         Quantity
                                         {mode === 'sell' && order.symbol && (
                                             <span
-                                                className="text-blue-500 cursor-pointer hover:underline"
+                                                className="text-primary-500 cursor-pointer hover:underline"
                                                 onClick={() => updateOrder('qty', availableQty)}
                                             >
                                                 Max: {availableQty}
@@ -678,7 +678,7 @@ const Trading = () => {
                                         value={order.qty}
                                         onChange={(e) => updateOrder('qty', e.target.value)}
                                         placeholder="0"
-                                        className="px-3 py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-blue-500 transition-colors placeholder-gray-400"
+                                        className="px-3 py-1.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none focus:border-primary-500 transition-colors placeholder-gray-400"
                                     />
                                     {mode === 'sell' && order.qty > availableQty && (
                                         <span className="text-[10px] text-red-500 font-bold absolute -bottom-4">Exceeds available</span>
@@ -704,7 +704,7 @@ const Trading = () => {
                                                     checked={order.type === 'limit'}
                                                     onChange={() => updateOrder('type', 'limit')}
                                                 />
-                                                <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center peer-checked:border-blue-500 after:content-[''] after:w-1.5 after:h-1.5 after:bg-blue-500 after:rounded-full after:scale-0 peer-checked:after:scale-100 after:transition-transform transition-colors"></div>
+                                                <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center peer-checked:border-primary-500 after:content-[''] after:w-1.5 after:h-1.5 after:bg-primary-500 after:rounded-full after:scale-0 peer-checked:after:scale-100 after:transition-transform transition-colors"></div>
                                                 LMT
                                             </label>
                                             <label className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase cursor-pointer">
@@ -718,7 +718,7 @@ const Trading = () => {
                                                         updateOrder('price', '');
                                                     }}
                                                 />
-                                                <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center peer-checked:border-blue-500 after:content-[''] after:w-1.5 after:h-1.5 after:bg-blue-500 after:rounded-full after:scale-0 peer-checked:after:scale-100 after:transition-transform transition-colors"></div>
+                                                <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center peer-checked:border-primary-500 after:content-[''] after:w-1.5 after:h-1.5 after:bg-primary-500 after:rounded-full after:scale-0 peer-checked:after:scale-100 after:transition-transform transition-colors"></div>
                                                 MKT
                                             </label>
                                         </div>
@@ -764,7 +764,7 @@ const Trading = () => {
                                     <button
                                         onClick={() => setShowConfirm(true)}
                                         disabled={calcLoading || !order.symbol || !order.qty || (!order.price && order.type === 'limit') || (mode === 'sell' && order.qty > availableQty) || !mode}
-                                        className={`w-32 py-2 rounded-xl font-bold text-sm text-white shadow-lg transition-transform active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed ${mode === 'sell' ? 'bg-red-500 shadow-red-500/20' : mode === 'buy' ? 'bg-blue-600 shadow-blue-600/20' : 'bg-gray-400 dark:bg-gray-700 shadow-none text-gray-600 dark:text-gray-300'}`}
+                                        className={`w-32 py-2 rounded-xl font-bold text-sm text-white shadow-lg transition-transform active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed ${mode === 'sell' ? 'bg-red-500 shadow-red-500/20' : mode === 'buy' ? 'bg-primary-600 shadow-primary-600/20' : 'bg-gray-400 dark:bg-gray-700 shadow-none text-gray-600 dark:text-gray-300'}`}
                                     >
                                         {calcLoading ? 'CALCULATING...' : mode ? mode.toUpperCase() : 'SELECT ACTION'}
                                     </button>
@@ -785,7 +785,7 @@ const Trading = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             {/* Top 5 Buy Table */}
                             <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden flex flex-col">
-                                <div className="py-1.5 text-center text-[10px] font-black uppercase text-blue-600 bg-blue-50 dark:bg-blue-900/20 tracking-wider">
+                                <div className="py-1.5 text-center text-[10px] font-black uppercase text-primary-600 bg-primary-50 dark:bg-primary-900/20 tracking-wider">
                                     Top 5 Buy
                                 </div>
                                 {order.symbol && isMarketOpen && marketDepth?.marketDepth?.buyMarketDepthList ? (
@@ -935,7 +935,7 @@ const Trading = () => {
                                         </div>
                                         <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
                                             <span className="text-gray-800 dark:text-white font-black text-xs uppercase">Net Amount</span>
-                                            <span className="font-black text-blue-600 dark:text-blue-400 text-sm">Rs. {
+                                            <span className="font-black text-primary-600 dark:text-primary-400 text-sm">Rs. {
                                                 mode === 'buy'
                                                     ? parseFloat(calcResult.total_cost).toLocaleString()
                                                     : parseFloat(calcResult.net_receivable).toLocaleString()
@@ -971,7 +971,7 @@ const Trading = () => {
                                 <div className="relative" ref={wlSearchRef}>
                                     <button
                                         onClick={() => { setWlShowSearch(!wlShowSearch); if (!wlShowSearch) setTimeout(() => document.getElementById('wl-trading-search')?.focus(), 100); }}
-                                        className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-[10px] font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                        className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-primary-600 dark:text-primary-400 rounded-lg text-[10px] font-bold hover:bg-primary-200 dark:hover:bg-primary-900/50 transition-colors"
                                     >
                                         <i className="fas fa-plus text-[8px]"></i> Add
                                     </button>
@@ -984,7 +984,7 @@ const Trading = () => {
                                                     value={wlSearchQuery}
                                                     onChange={(e) => wlHandleSearch(e.target.value)}
                                                     placeholder="Search symbol..."
-                                                    className="w-full px-3 py-1.5 bg-gray-100 dark:bg-gray-900 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                                    className="w-full px-3 py-1.5 bg-gray-100 dark:bg-gray-900 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 dark:text-white"
                                                     autoComplete="off"
                                                 />
                                             </div>
@@ -1025,7 +1025,7 @@ const Trading = () => {
                                         key={group.id}
                                         onClick={() => { setWlSelectedGroup(group); fetchWatchlistItems(group.id); }}
                                         className={`px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition-all ${wlSelectedGroup?.id === group.id
-                                            ? 'bg-blue-600 text-white'
+                                            ? 'bg-primary-600 text-white'
                                             : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                                             }`}
                                     >
@@ -1098,7 +1098,7 @@ const Trading = () => {
                     <button
                         onClick={() => setOrdersTab('active')}
                         className={`px-8 py-4 font-bold text-sm uppercase tracking-wider transition-colors ${ordersTab === 'active'
-                            ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-500 dark:bg-blue-900/20 dark:text-blue-400'
+                            ? 'bg-primary-50 text-primary-600 border-b-2 border-primary-500 dark:bg-primary-900/20 dark:text-primary-400'
                             : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                             }`}
                     >
@@ -1107,7 +1107,7 @@ const Trading = () => {
                     <button
                         onClick={() => setOrdersTab('history')}
                         className={`px-8 py-4 font-bold text-sm uppercase tracking-wider transition-colors ${ordersTab === 'history'
-                            ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-500 dark:bg-blue-900/20 dark:text-blue-400'
+                            ? 'bg-primary-50 text-primary-600 border-b-2 border-primary-500 dark:bg-primary-900/20 dark:text-primary-400'
                             : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                             }`}
                     >
@@ -1276,7 +1276,7 @@ const Trading = () => {
                                         key={p}
                                         onClick={() => handlePageChange(p)}
                                         className={`w-8 h-8 text-xs font-bold rounded-lg transition-all ${currentPage === p
-                                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30'
+                                            ? 'bg-primary-600 text-white shadow-lg shadow-blue-900/30'
                                             : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
                                             }`}
                                     >

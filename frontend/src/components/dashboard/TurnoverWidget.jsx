@@ -27,7 +27,7 @@ const TurnoverWidget = () => {
     return (
         <div className="mt-8">
             <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-                <span className="bg-purple-600 text-white p-2 rounded-lg text-sm">🔥</span>
+                <span className="bg-primary-600 text-white p-2 rounded-lg text-sm">🔥</span>
                 Top Turnover
             </h3>
 
@@ -46,12 +46,12 @@ const TurnoverWidget = () => {
                             <tr
                                 key={stock.id}
                                 onClick={() => navigate('/market')}
-                                className="hover:bg-purple-50/30 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
+                                className="hover:bg-primary-50/30 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
                             >
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-3">
                                         <span className="text-xs font-bold text-gray-400">#{index + 1}</span>
-                                        <span className="font-black text-purple-600 dark:text-purple-400 block">{stock.symbol}</span>
+                                        <span className="font-black text-primary-600 dark:text-primary-400 block">{stock.symbol}</span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 text-right">
@@ -77,7 +77,7 @@ const TurnoverWidget = () => {
                     </tbody>
                 </table>
                 <div className="p-4 bg-gray-50 dark:bg-gray-900/30 text-center border-t border-gray-100 dark:border-gray-700">
-                    <button onClick={() => navigate('/market')} className="text-sm font-bold text-purple-600 hover:text-purple-800">
+                    <button onClick={() => navigate('/market')} className="text-sm font-bold text-primary-600 hover:text-primary-800">
                         View All Market Data →
                     </button>
                 </div>

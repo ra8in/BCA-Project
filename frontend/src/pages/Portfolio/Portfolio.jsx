@@ -62,7 +62,7 @@ const Portfolio = () => {
                 <p className="text-xl text-red-500">{error}</p>
                 <button
                     onClick={fetchPortfolio}
-                    className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    className="mt-4 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                     Retry
                 </button>
@@ -78,7 +78,7 @@ const Portfolio = () => {
             <h2 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">My Portfolio</h2>
 
             {/* Portfolio Summary */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 mb-8 text-white shadow-lg">
+            <div className="bg-gradient-to-r from-primary-600 to-primary-800 rounded-2xl p-8 mb-8 text-white shadow-lg">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                     <div>
                         <p className="text-blue-100 text-sm font-medium mb-1">Cash Balance</p>
@@ -130,7 +130,7 @@ const Portfolio = () => {
                         type="checkbox"
                         checked={showPastHoldings}
                         onChange={(e) => setShowPastHoldings(e.target.checked)}
-                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-primary-500"
                     />
                     <span className="text-gray-700 dark:text-gray-300 font-medium">Show Past Holdings</span>
                 </label>
@@ -169,13 +169,13 @@ const Portfolio = () => {
                                             className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                                         >
                                             <td
-                                                className="px-6 py-4 font-bold text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                                                className="px-6 py-4 font-bold text-primary-600 dark:text-primary-400 cursor-pointer hover:underline"
                                                 onClick={() => navigate(`/stock/${holding.stock_symbol}`)}
                                             >
                                                 {holding.stock_symbol}
                                             </td>
                                             <td
-                                                className="px-6 py-4 text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+                                                className="px-6 py-4 text-gray-700 dark:text-gray-300 cursor-pointer hover:text-primary-600 dark:hover:text-primary-400"
                                                 onClick={() => navigate(`/stock/${holding.stock_symbol}`)}
                                             >
                                                 {holding.stock_name}
@@ -236,7 +236,7 @@ const Portfolio = () => {
                                                 className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                                             >
                                                 <td
-                                                    className="px-6 py-4 font-bold text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                                                    className="px-6 py-4 font-bold text-primary-600 dark:text-primary-400 cursor-pointer hover:underline"
                                                     onClick={() => navigate(`/stock/${item.stock_symbol}`)}
                                                 >
                                                     {item.stock_symbol}

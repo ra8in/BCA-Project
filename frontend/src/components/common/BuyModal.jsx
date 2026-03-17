@@ -76,7 +76,7 @@ const BuyModal = ({ stock, onClose }) => {
                         <button
                             onClick={handleBuy}
                             disabled={!canAfford || quantity <= 0}
-                            className={`flex-1 py-2 px-4 rounded-lg text-white font-medium ${canAfford ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'
+                            className={`flex-1 py-2 px-4 rounded-lg text-white font-medium ${canAfford ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'
                                 }`}
                         >
                             Confirm Buy

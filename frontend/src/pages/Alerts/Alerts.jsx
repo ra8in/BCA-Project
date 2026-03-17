@@ -112,7 +112,7 @@ const Alerts = () => {
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
             </div>
         );
     }
@@ -143,10 +143,10 @@ const Alerts = () => {
                             />
                             {/* Show LTP prominently after selection */}
                             {selectedStock && (
-                                <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                <div className="mt-3 p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-gray-600 dark:text-gray-400">Current LTP</span>
-                                        <span className="text-xl font-black text-blue-600 dark:text-blue-400">
+                                        <span className="text-xl font-black text-primary-600 dark:text-primary-400">
                                             Rs. {parseFloat(selectedStock.last_price).toLocaleString()}
                                         </span>
                                     </div>
@@ -170,7 +170,7 @@ const Alerts = () => {
                                 placeholder="Enter Price" className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl px-4 py-3 font-bold outline-none" />
                         </div>
                         <button onClick={handleCreateAlert} disabled={creating || !selectedStock || !targetPrice}
-                            className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold disabled:opacity-50">
+                            className="w-full bg-primary-600 text-white py-3 rounded-xl font-bold disabled:opacity-50">
                             {creating ? 'Creating...' : 'Set Alert'}
                         </button>
                     </div>
@@ -209,7 +209,7 @@ const Alerts = () => {
                                                     </div>
                                                     <div className="flex gap-2 justify-end">
                                                         <button onClick={closePopup} className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-600 rounded font-bold">Cancel</button>
-                                                        <button onClick={() => handleUpdate(alert.id)} className="px-3 py-1 text-sm bg-blue-500 text-white rounded font-bold">Save</button>
+                                                        <button onClick={() => handleUpdate(alert.id)} className="px-3 py-1 text-sm bg-primary-500 text-white rounded font-bold">Save</button>
                                                     </div>
                                                 </div>
                                             )}
@@ -217,7 +217,7 @@ const Alerts = () => {
                                     )}
 
                                     {/* Alert card */}
-                                    <div className={`flex justify-between items-center p-3 rounded-xl border ${alert.is_active ? 'border-blue-200 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 bg-gray-50 dark:bg-gray-900/50'}`}>
+                                    <div className={`flex justify-between items-center p-3 rounded-xl border ${alert.is_active ? 'border-primary-200 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 bg-gray-50 dark:bg-gray-900/50'}`}>
                                         <div>
                                             <span className="font-black">{alert.symbol}</span>
                                             <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-bold ${alert.alert_type === 'ABOVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -227,7 +227,7 @@ const Alerts = () => {
                                         </div>
                                         <div className="flex gap-1">
                                             {alert.is_active && (
-                                                <button onClick={() => openEdit(alert)} className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg text-blue-500 transition-colors" title="Edit Alert">
+                                                <button onClick={() => openEdit(alert)} className="p-2 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded-lg text-primary-500 transition-colors" title="Edit Alert">
                                                     <i className="fas fa-edit"></i>
                                                 </button>
                                             )}

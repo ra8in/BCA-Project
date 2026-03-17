@@ -115,7 +115,7 @@ const MarketMovers = () => {
                                                 <span className="text-xs font-bold text-gray-400">
                                                     #{(currentPage - 1) * 20 + index + 1}
                                                 </span>
-                                                <span className="font-black text-blue-600 dark:text-blue-400 text-lg">
+                                                <span className="font-black text-primary-600 dark:text-primary-400 text-lg">
                                                     {stock.symbol}
                                                 </span>
                                             </div>

@@ -39,7 +39,7 @@ const ResultCard = ({ label, amount, subLabel, subAmount, children }) => (
     <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col border-opacity-50 h-fit">
         <div className="mb-6 pb-6 border-b dark:border-gray-700">
             <h3 className="text-gray-500 text-sm font-medium mb-1">{label}</h3>
-            <div className="text-4xl font-black text-blue-600 dark:text-blue-400">
+            <div className="text-4xl font-black text-primary-600 dark:text-primary-400">
                 NPR {parseFloat(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             {subLabel && (
@@ -510,7 +510,7 @@ const Calculators = () => {
                         key={tab.id}
                         onClick={() => setMainTab(tab.id)}
                         className={`px-6 py-3 font-bold text-sm rounded-t-lg transition-colors border-b-2 ${mainTab === tab.id
-                            ? 'border-blue-600 text-blue-600 bg-blue-50 dark:bg-gray-800 dark:text-blue-400'
+                            ? 'border-primary-600 text-primary-600 bg-primary-50 dark:bg-gray-800 dark:text-primary-400'
                             : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                             }`}
                     >

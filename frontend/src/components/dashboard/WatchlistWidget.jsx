@@ -180,7 +180,7 @@ const WatchlistWidget = () => {
         <div className="mt-8">
             <div className="flex items-center justify-between mb-6">
                 <h3 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-                    <span className="bg-blue-600 text-white p-2 rounded-lg text-sm">⭐</span>
+                    <span className="bg-primary-600 text-white p-2 rounded-lg text-sm">⭐</span>
                     My Watchlists
                 </h3>
                 <button
@@ -199,10 +199,10 @@ const WatchlistWidget = () => {
                         value={newGroupName}
                         onChange={(e) => setNewGroupName(e.target.value)}
                         placeholder="Watchlist name..."
-                        className="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                         autoFocus
                     />
-                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700">Create</button>
+                    <button type="submit" className="px-4 py-2 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700">Create</button>
                     <button type="button" onClick={() => { setShowCreateInput(false); setError(''); }} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl">Cancel</button>
                 </form>
             )}
@@ -216,7 +216,7 @@ const WatchlistWidget = () => {
                             key={group.id}
                             onClick={() => setSelectedGroup(group)}
                             className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all ${selectedGroup?.id === group.id
-                                ? 'bg-blue-600 text-white shadow-lg'
+                                ? 'bg-primary-600 text-white shadow-lg'
                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                 }`}
                         >
@@ -240,7 +240,7 @@ const WatchlistWidget = () => {
                         <div className="relative" ref={searchRef}>
                             <button
                                 onClick={() => { setShowSearch(!showSearch); if (!showSearch) setTimeout(() => document.getElementById('watchlist-search')?.focus(), 100); }}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-sm font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-sm font-bold hover:bg-primary-200 dark:hover:bg-primary-900/50 transition-colors"
                             >
                                 <span>+ Add Stock</span>
                             </button>
@@ -255,7 +255,7 @@ const WatchlistWidget = () => {
                                             value={searchQuery}
                                             onChange={(e) => handleSearch(e.target.value)}
                                             placeholder="Search symbol (e.g. NABIL)..."
-                                            className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-900 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                            className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-900 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 dark:text-white"
                                             autoComplete="off"
                                         />
                                     </div>
@@ -331,7 +331,7 @@ const WatchlistWidget = () => {
                                         onClick={() => navigate(`/stock/${item.stock_details?.symbol}`)}
                                     >
                                         <td className="px-6 py-4">
-                                            <span className="font-black text-blue-600 dark:text-blue-400">{item.stock_details?.symbol}</span>
+                                            <span className="font-black text-primary-600 dark:text-primary-400">{item.stock_details?.symbol}</span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate max-w-[200px]">

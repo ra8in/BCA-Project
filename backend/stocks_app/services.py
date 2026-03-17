@@ -714,24 +714,96 @@ def _refresh_global_stock_cache() -> dict:
     logger.info(f"Phase 1: {len(active_symbols)} active companies from DB.")
     
     if market_state == "CLOSED":
-        logger.info("Market is CLOSED. Skipping NEPSE API calls — serving DB prices.")
+        logger.info("Market is CLOSED. Fetching today-price from NEPSE for correct previousDayClosePrice...")
         ttl = MARKET_CLOSED_TTL
-        
-        # Stock.previous_close is the source of truth — set by the 4:30 PM EOD job
-        # or by ensure_previous_close_snapshot() at startup.
+
+        # Fetch today-price once (cached 24h) to get the real previousDayClosePrice
+        # for every stock.  We cannot rely on Stock.previous_close because
+        # update_stock_prices() historically overwrote it with today's close,
+        # making change = 0 for everything.
+        api_prev_map = {}  # symbol -> (prev_close, ltp) from NEPSE API
+        prev_cache_key = "closed_mode_prev_close_map"
+        api_prev_map_cached = cache.get(prev_cache_key)
+
+        if api_prev_map_cached:
+            api_prev_map = api_prev_map_cached
+            logger.info(f"CLOSED mode: prev_close_map from cache ({len(api_prev_map)} stocks)")
+        else:
+            try:
+                phase2_nepse = _get_nepse_client()
+                all_prices = []
+                page_c, total_pages_c = 0, 1
+                while page_c < total_pages_c:
+                    url_c = (
+                        f"{phase2_nepse.BASE_URL}/api/nots/nepse-data/today-price"
+                        f"?size=500&page={page_c}"
+                    )
+                    pid_c = phase2_nepse._get_floorsheet_payload_id(0, datetime.now())
+                    resp_c = _nepse_request('post', url_c, json={"id": pid_c})
+                    page_data_c = resp_c.json()
+                    if isinstance(page_data_c, dict):
+                        all_prices.extend(page_data_c.get('content', []))
+                        total_pages_c = page_data_c.get('totalPages', 1)
+                    elif isinstance(page_data_c, list):
+                        all_prices.extend(page_data_c)
+                        break
+                    page_c += 1
+
+                for item in all_prices:
+                    sym = item.get('symbol')
+                    prev = item.get('previousDayClosePrice')
+                    ltp  = item.get('closePrice') or item.get('lastUpdatedPrice')
+                    if sym and prev:
+                        api_prev_map[sym] = (
+                            safe_decimal(prev),
+                            safe_decimal(ltp or 0),
+                        )
+
+                # Cache this map for 24h so subsequent restarts don't need to re-fetch
+                cache.set(prev_cache_key, api_prev_map, ttl)
+                logger.info(
+                    f"CLOSED mode: fetched previousDayClosePrice for {len(api_prev_map)} stocks, cached 24h"
+                )
+
+                # Also persist correct previous_close to DB so the scheduler won't corrupt it again
+                if api_prev_map:
+                    for sym, (prev_val, ltp_val) in api_prev_map.items():
+                        if prev_val > 0 and ltp_val > 0:
+                            change = round(ltp_val - prev_val, 2)
+                            chg_pct = round(float(change) / float(prev_val) * 100, 2)
+                            Stock.objects.filter(symbol=sym, is_active=True).update(
+                                previous_close=prev_val,
+                                last_price=ltp_val,
+                                change=Decimal(str(change)),
+                                change_percent=Decimal(str(chg_pct)),
+                            )
+                    logger.info("CLOSED mode: DB previous_close corrected for all traded stocks.")
+
+            except Exception as e:
+                logger.warning(
+                    f"CLOSED mode: could not fetch today-price from NEPSE ({e}). "
+                    "Falling back to DB previous_close."
+                )
+
         db_stocks = Stock.objects.filter(is_active=True)
         for stock in db_stocks:
             ltp = stock.last_price or Decimal('0')
-            prev_close = stock.previous_close or Decimal('0')
-            
-            # Recompute change from true values
+
+            # Prefer the API-sourced previousDayClosePrice if available
+            if stock.symbol in api_prev_map:
+                api_prev, api_ltp = api_prev_map[stock.symbol]
+                ltp = api_ltp if api_ltp > 0 else ltp
+                prev_close = api_prev
+            else:
+                prev_close = stock.previous_close or Decimal('0')
+
             if ltp > 0 and prev_close > 0:
                 change = round(ltp - prev_close, 2)
                 change_percent = round(float(change) / float(prev_close) * 100, 2)
             else:
                 change = Decimal('0')
                 change_percent = 0.0
-            
+
             formatted = {
                 'symbol': stock.symbol,
                 'ltp': ltp,
@@ -748,7 +820,8 @@ def _refresh_global_stock_cache() -> dict:
             }
             cache.set(f"stock_price:{stock.symbol}", formatted, ttl)
             results[stock.symbol] = formatted
-        logger.info(f"CLOSED mode: Cached {len(results)} stocks from DB with {ttl}s TTL.")
+
+        logger.info(f"CLOSED mode: Cached {len(results)} stocks with {ttl}s TTL.")
         return results
 
     # === PHASE 2: Bulk-fetch from today-price (PAGINATED) ===
@@ -1260,22 +1333,57 @@ def update_all_market_data() -> dict:
             stock_data = stock_prices.get(stock.symbol)
 
             if stock_data:
-                stock.last_price = stock_data['ltp']
-                stock.change = stock_data['change']
-                stock.change_percent = stock_data['change_percent']
+                ltp = stock_data['ltp']
+                stock.last_price = ltp
                 stock.open_price = stock_data['open']
                 stock.high_price = stock_data['high']
                 stock.low_price = stock_data['low']
-                stock.previous_close = stock_data['previous_close']
                 stock.total_trade_quantity = stock_data['volume'] or 0
                 stock.total_traded_value = stock_data['turnover'] or Decimal('0')
                 stock.total_trades = stock_data['transactions'] or 0
-                stock.save(update_fields=[
+
+                # ── PREVIOUS-CLOSE RULE ──────────────────────────────────────
+                # previous_close = yesterday's close price (set once per day,
+                # either by the EOD job, ensure_previous_close_snapshot(), or
+                # here if it has never been set yet for this stock).
+                #
+                # We intentionally DO NOT overwrite a valid previous_close with
+                # the NEPSE API field on every intraday tick.  After market
+                # close the API's previousDayClosePrice sometimes flips to the
+                # current-day close, which would zero out all change values.
+                api_prev = stock_data.get('previous_close')  # from NEPSE API
+                db_prev  = stock.previous_close              # stored yesterday's close
+
+                if db_prev and db_prev > 0:
+                    # Use the trusted DB value for change calculation.
+                    true_prev = db_prev
+                elif api_prev and safe_decimal(api_prev) > 0:
+                    # DB has no valid previous_close yet — bootstrap from API.
+                    true_prev = safe_decimal(api_prev)
+                    stock.previous_close = true_prev
+                else:
+                    true_prev = Decimal('0')
+
+                # Recalculate change / change_percent from the true baseline.
+                if ltp and ltp > 0 and true_prev > 0:
+                    stock.change = round(ltp - true_prev, 2)
+                    stock.change_percent = round(
+                        float(stock.change) / float(true_prev) * 100, 2
+                    )
+                else:
+                    stock.change = Decimal('0')
+                    stock.change_percent = Decimal('0')
+
+                save_fields = [
                     'last_price', 'change', 'change_percent',
                     'open_price', 'high_price', 'low_price',
-                    'previous_close', 'total_trade_quantity',
-                    'total_traded_value', 'total_trades'
-                ])
+                    'total_trade_quantity', 'total_traded_value', 'total_trades'
+                ]
+                # Only persist previous_close if we just bootstrapped it.
+                if stock.previous_close != db_prev:
+                    save_fields.append('previous_close')
+
+                stock.save(update_fields=save_fields)
                 stocks_updated += 1
 
         except Exception as e:

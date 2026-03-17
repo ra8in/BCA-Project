@@ -143,7 +143,7 @@ const Settings = () => {
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Settings Locked</h2>
                 <p className="text-gray-500 dark:text-gray-400 max-w-md">Please log in to access your account preferences and settings.</p>
-                <a href="/login" className="mt-8 px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-purple-600/20">
+                <a href="/login" className="mt-8 px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-primary-600/20">
                     Sign In
                 </a>
             </div>
@@ -162,7 +162,7 @@ const Settings = () => {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black tracking-tight transition-all duration-200 ${activeTab === tab.id
-                                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
+                                ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/20'
                                 : 'bg-white dark:bg-[#1E1E24] text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                                 }`}
                         >
@@ -190,7 +190,7 @@ const Settings = () => {
                                             value={displayName}
                                             onChange={(e) => setDisplayName(e.target.value)}
                                             placeholder="John Doe"
-                                            className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                                            className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -208,7 +208,7 @@ const Settings = () => {
                                             type="email"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
-                                            className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                                            className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                                         />
                                     </div>
                                 </div>
@@ -230,7 +230,7 @@ const Settings = () => {
                                                     handleSaveProfile();
                                                 }}
                                                 disabled={saveStatus === 'saving'}
-                                                className="px-6 py-3 bg-purple-600 text-white rounded-xl font-black tracking-tight hover:bg-purple-700 transition-all disabled:opacity-50"
+                                                className="px-6 py-3 bg-primary-600 text-white rounded-xl font-black tracking-tight hover:bg-primary-700 transition-all disabled:opacity-50"
                                             >
                                                 {saveStatus === 'saving' ? 'Saving...' : 'Yes, Save'}
                                             </button>
@@ -260,7 +260,7 @@ const Settings = () => {
                                                     value={fundAmount}
                                                     onChange={(e) => setFundAmount(e.target.value)}
                                                     placeholder="Enter Amount"
-                                                    className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                                                    className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -270,7 +270,7 @@ const Settings = () => {
                                                     value={fundReason}
                                                     onChange={(e) => setFundReason(e.target.value)}
                                                     placeholder="e.g. For new strategy testing"
-                                                    className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                                                    className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                                                 />
                                             </div>
                                         </div>
@@ -332,7 +332,7 @@ const Settings = () => {
                                     </div>
                                     <button
                                         onClick={toggleTheme}
-                                        className={`w-14 h-8 rounded-full p-1 transition-all duration-300 flex items-center ${theme === 'dark' ? 'bg-purple-600' : 'bg-gray-200'
+                                        className={`w-14 h-8 rounded-full p-1 transition-all duration-300 flex items-center ${theme === 'dark' ? 'bg-primary-600' : 'bg-gray-200'
                                             }`}
                                     >
                                         <div className={`w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'
@@ -357,7 +357,7 @@ const Settings = () => {
                                             value={oldPassword}
                                             onChange={(e) => setOldPassword(e.target.value)}
                                             placeholder="••••••••"
-                                            className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                                            className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -367,7 +367,7 @@ const Settings = () => {
                                             value={newPassword}
                                             onChange={(e) => setNewPassword(e.target.value)}
                                             placeholder="••••••••"
-                                            className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                                            className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-2xl px-5 py-4 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                                         />
                                     </div>
                                     {pwdChangeError && <p className="text-red-500 text-sm font-bold">{pwdChangeError}</p>}
@@ -379,7 +379,7 @@ const Settings = () => {
                                         <button
                                             onClick={() => setShowPwdConfirm(true)}
                                             disabled={!oldPassword || !newPassword || pwdChangeStatus === 'changing'}
-                                            className="px-8 py-4 bg-purple-600 text-white rounded-2xl font-black tracking-tight hover:scale-[1.02] transition-all shadow-lg shadow-purple-600/20 disabled:opacity-50"
+                                            className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black tracking-tight hover:scale-[1.02] transition-all shadow-lg shadow-primary-600/20 disabled:opacity-50"
                                         >
                                             {pwdChangeStatus === 'changing' ? 'Updating...' : 'Update Password'}
                                         </button>
@@ -392,7 +392,7 @@ const Settings = () => {
                                                     handlePasswordChange();
                                                 }}
                                                 disabled={pwdChangeStatus === 'changing'}
-                                                className="px-6 py-3 bg-purple-600 text-white rounded-xl font-black tracking-tight hover:bg-purple-700 transition-all disabled:opacity-50"
+                                                className="px-6 py-3 bg-primary-600 text-white rounded-xl font-black tracking-tight hover:bg-primary-700 transition-all disabled:opacity-50"
                                             >
                                                 Yes, Update
                                             </button>
@@ -486,7 +486,7 @@ const Settings = () => {
                                                 <h4 className="font-black text-gray-900 dark:text-white uppercase tracking-tighter">{item.label}</h4>
                                                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{item.desc}</p>
                                             </div>
-                                            <button className="w-14 h-8 bg-purple-600 rounded-full p-1 transition-all duration-300 flex items-center">
+                                            <button className="w-14 h-8 bg-primary-600 rounded-full p-1 transition-all duration-300 flex items-center">
                                                 <div className="w-6 h-6 bg-white rounded-full shadow-md translate-x-6"></div>
                                             </button>
                                         </div>

@@ -80,7 +80,7 @@ const StockHistory = () => {
                 <p className="text-xl text-red-500">{error}</p>
                 <button
                     onClick={() => navigate('/portfolio')}
-                    className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    className="mt-4 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                     Back to Portfolio
                 </button>
@@ -127,7 +127,7 @@ const StockHistory = () => {
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Current Holding</p>
-                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{history?.summary?.current_holding_qty || 0}</p>
+                    <p className="text-2xl font-bold text-primary-600 dark:text-primary-400">{history?.summary?.current_holding_qty || 0}</p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Invested</p>

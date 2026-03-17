@@ -76,7 +76,7 @@ const PortfolioHistory = () => {
                 <p className="text-xl text-red-500">{error}</p>
                 <button
                     onClick={() => navigate('/portfolio')}
-                    className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    className="mt-4 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                     Back to Portfolio
                 </button>
@@ -164,7 +164,7 @@ const PortfolioHistory = () => {
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Current Holding</p>
-                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totalCurrentHolding}</p>
+                    <p className="text-2xl font-bold text-primary-600 dark:text-primary-400">{totalCurrentHolding}</p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Invested (Lifetime)</p>
@@ -179,7 +179,7 @@ const PortfolioHistory = () => {
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Cash Balance</p>
-                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    <p className="text-2xl font-bold text-primary-600 dark:text-primary-400">
                         Rs. {parseFloat(portfolio?.cash_balance || 0).toLocaleString()}
                     </p>
                 </div>
@@ -192,7 +192,7 @@ const PortfolioHistory = () => {
                         type="checkbox"
                         checked={showPast}
                         onChange={(e) => setShowPast(e.target.checked)}
-                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
                     />
                     <span className="text-gray-700 dark:text-gray-300 font-medium">Show Past Transactions (Fully Sold)</span>
                 </label>
@@ -226,7 +226,7 @@ const PortfolioHistory = () => {
                                         <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">
                                             {stock.symbol}
                                         </td>
-                                        <td className="px-6 py-4 text-sm font-bold text-blue-600 dark:text-blue-400">
+                                        <td className="px-6 py-4 text-sm font-bold text-primary-600 dark:text-primary-400">
                                             {stock.currentHolding}
                                         </td>
                                         <td className="px-6 py-4 text-sm font-medium dark:text-white">

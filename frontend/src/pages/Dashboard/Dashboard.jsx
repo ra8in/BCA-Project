@@ -43,7 +43,7 @@ const Dashboard = () => {
                 <h3 className={`text-lg font-bold ${titleColor} dark:text-white`}>{title}</h3>
                 <button
                     onClick={onViewAll}
-                    className="text-xs font-bold text-gray-400 hover:text-blue-600 dark:text-gray-500 dark:hover:text-blue-400 transition-colors"
+                    className="text-xs font-bold text-gray-400 hover:text-primary-600 dark:text-gray-500 dark:hover:text-primary-400 transition-colors"
                 >
                     View All →
                 </button>
@@ -62,7 +62,7 @@ const Dashboard = () => {
             className="hover:bg-gray-50 dark:hover:bg-gray-600 cursor-pointer transition-colors border-b border-gray-50 dark:border-gray-600/50 last:border-0"
             onClick={() => navigate(`/stock/${stock.symbol}`)}
         >
-            <td className="py-3 font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">{stock.symbol}</td>
+            <td className="py-3 font-bold text-primary-600 dark:text-primary-400 whitespace-nowrap">{stock.symbol}</td>
             <td className="py-3 font-medium dark:text-white whitespace-nowrap">Rs. {parseFloat(stock.last_price).toLocaleString()}</td>
             <td className={`py-3 font-bold whitespace-nowrap text-right ${parseFloat(stock.change_percent) > 0
                 ? 'text-green-500'
@@ -81,7 +81,7 @@ const Dashboard = () => {
             className="hover:bg-gray-50 dark:hover:bg-gray-600 cursor-pointer transition-colors border-b border-gray-50 dark:border-gray-600/50 last:border-0"
             onClick={() => navigate(`/stock/${stock.symbol}`)}
         >
-            <td className="py-3 font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">{stock.symbol}</td>
+            <td className="py-3 font-bold text-primary-600 dark:text-primary-400 whitespace-nowrap">{stock.symbol}</td>
             <td className="py-3 font-medium dark:text-white whitespace-nowrap">
                 Rs. {(parseFloat(stock.total_traded_value || 0) / 10000000).toFixed(2)}Cr
             </td>

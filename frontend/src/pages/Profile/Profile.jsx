@@ -86,7 +86,7 @@ const Profile = () => {
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Private Profile</h2>
                 <p className="text-gray-500 dark:text-gray-400 max-w-md">Please log in to view and manage your profile settings.</p>
-                <a href="/login" className="mt-8 px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-purple-600/20">
+                <a href="/login" className="mt-8 px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-primary-600/20">
                     Sign In
                 </a>
             </div>
@@ -98,11 +98,11 @@ const Profile = () => {
             {/* Profile Header Card */}
             <div className="relative overflow-hidden bg-white dark:bg-[#1E1E24] rounded-[2.5rem] border border-gray-200 dark:border-gray-800 shadow-xl shadow-gray-200/20 dark:shadow-none p-8 md:p-12">
                 {/* Decorative background */}
-                <div className="absolute -top-24 -right-24 w-64 h-64 bg-purple-500/10 dark:bg-purple-500/5 blur-[100px] rounded-full"></div>
+                <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary-500/10 dark:bg-primary-500/5 blur-[100px] rounded-full"></div>
 
                 <div className="relative flex flex-col md:flex-row items-center gap-8 md:gap-12">
                     <div className="relative group">
-                        <div className="absolute -inset-1 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-full blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
+                        <div className="absolute -inset-1 bg-gradient-to-tr from-primary-600 to-blue-600 rounded-full blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
                         <img
                             src={avatarUrl}
                             alt="Profile"
@@ -118,7 +118,7 @@ const Profile = () => {
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
-                            className="absolute bottom-2 right-2 w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-purple-600 transition-colors shadow-lg disabled:opacity-50"
+                            className="absolute bottom-2 right-2 w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-primary-600 transition-colors shadow-lg disabled:opacity-50"
                         >
                             <i className={`fas ${uploading ? 'fa-spinner fa-spin' : 'fa-camera'} text-sm`}></i>
                         </button>
@@ -215,7 +215,7 @@ const Profile = () => {
                     </div>
 
                     {/* Performance Card */}
-                    <div className="md:col-span-2 bg-gradient-to-br from-purple-600 to-indigo-700 rounded-[2rem] p-8 md:p-10 text-white shadow-2xl shadow-purple-600/20">
+                    <div className="md:col-span-2 bg-gradient-to-br from-primary-600 to-indigo-700 rounded-[2rem] p-8 md:p-10 text-white shadow-2xl shadow-primary-600/20">
                         <div className="flex justify-between items-start">
                             <div className="space-y-4">
                                 <h3 className="text-lg font-black uppercase tracking-widest opacity-80">Portfolio Performance</h3>
@@ -244,7 +244,7 @@ const Profile = () => {
 
                     <div className="space-y-8">
                         <Link to="/settings" className="block space-y-1.5 font-medium transition-all group cursor-pointer">
-                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-purple-500">Full Name</span>
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-primary-500">Full Name</span>
                             <p className="text-gray-900 dark:text-white flex justify-between items-center transition-all">
                                 <span>{user?.name || 'Not Set'}</span>
                                 <i className="fas fa-angle-right text-gray-300 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all"></i>
@@ -252,7 +252,7 @@ const Profile = () => {
                         </Link>
 
                         <Link to="/settings" className="block space-y-1.5 font-medium transition-all group cursor-pointer">
-                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-purple-500">Email Address</span>
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-primary-500">Email Address</span>
                             <p className="text-gray-900 dark:text-white flex justify-between items-center transition-all">
                                 <span>{user?.email}</span>
                                 <i className="fas fa-angle-right text-gray-300 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all"></i>

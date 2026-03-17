@@ -178,7 +178,7 @@ const StockDetail = () => {
                 <div className="text-6xl mb-4">📉</div>
                 <h2 className="text-2xl font-black text-gray-800 dark:text-white mb-2">Stock Not Found</h2>
                 <p className="text-gray-500 dark:text-gray-400 mb-6">The symbol "{symbol}" doesn't exist or is no longer active.</p>
-                <button onClick={() => navigate(-1)} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700">
+                <button onClick={() => navigate(-1)} className="px-6 py-2 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700">
                     Go Back
                 </button>
             </div>
@@ -242,7 +242,7 @@ const StockDetail = () => {
             <div className="mb-8">
                 <button
                     onClick={() => setShowDepth(!showDepth)}
-                    className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold hover:underline mb-4"
+                    className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-bold hover:underline mb-4"
                 >
                     {showDepth ? 'Hide Market Depth' : 'Show Market Depth'}
                     <svg className={`w-4 h-4 transform transition-transform ${showDepth ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -445,7 +445,7 @@ const TransactionHistory = ({ symbol }) => {
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Your Position</h2>
                 <button
                     onClick={() => navigate(`/portfolio/history/${symbol}`)}
-                    className="text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-1"
+                    className="text-primary-600 dark:text-primary-400 font-bold hover:underline flex items-center gap-1"
                 >
                     View Full History
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -462,7 +462,7 @@ const TransactionHistory = ({ symbol }) => {
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Current Holding</p>
-                    <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{history.summary.current_holding_qty}</p>
+                    <p className="text-xl font-bold text-primary-600 dark:text-primary-400">{history.summary.current_holding_qty}</p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Net Invested</p>

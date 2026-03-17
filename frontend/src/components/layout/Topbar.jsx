@@ -76,7 +76,7 @@ const Topbar = () => {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onFocus={() => setIsSearchFocused(true)}
-                        className="w-full bg-white dark:bg-[#1E1E24] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-full py-2 pl-12 pr-4 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-500/10 transition-all text-sm placeholder-gray-500 font-normal"
+                        className="w-full bg-white dark:bg-[#1E1E24] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-full py-2 pl-12 pr-4 focus:outline-none focus:border-primary-400 focus:ring-4 focus:ring-primary-500/10 transition-all text-sm placeholder-gray-500 font-normal"
                     />
 
                     {/* Search Results Dropdown */}
@@ -152,7 +152,7 @@ const Topbar = () => {
                             </div>
 
                             {isAuthenticated && (
-                                <div className="m-3 p-3 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex flex-col text-white shadow-md shadow-purple-900/20">
+                                <div className="m-3 p-3 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex flex-col text-white shadow-md shadow-primary-900/20">
                                     <span className="text-[10px] uppercase tracking-wider opacity-90 font-semibold mb-1">Total Balance</span>
                                     <span className="text-lg font-bold">
                                         {cashBalance != null ? `Rs. ${cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Loading...'}
@@ -164,13 +164,13 @@ const Topbar = () => {
                                 {isAuthenticated && (
                                     <>
                                         <li>
-                                            <a href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-900 dark:text-gray-100 text-sm font-bold transition-all hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-purple-600 dark:hover:text-purple-400">
+                                            <a href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-900 dark:text-gray-100 text-sm font-bold transition-all hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-primary-600 dark:hover:text-primary-400">
                                                 <i className="fas fa-user-circle w-5 text-center text-lg"></i>
                                                 <span>My Profile</span>
                                             </a>
                                         </li>
                                         <li>
-                                            <a href="/settings" className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-900 dark:text-gray-100 text-sm font-bold transition-all hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-purple-600 dark:hover:text-purple-400">
+                                            <a href="/settings" className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-900 dark:text-gray-100 text-sm font-bold transition-all hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-primary-600 dark:hover:text-primary-400">
                                                 <i className="fas fa-cog w-5 text-center text-lg"></i>
                                                 <span>Settings</span>
                                             </a>

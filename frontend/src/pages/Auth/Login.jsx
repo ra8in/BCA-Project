@@ -49,7 +49,7 @@ const Login = () => {
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all dark:text-white"
+                            className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all dark:text-white"
                             placeholder="Enter username"
                             required
                         />
@@ -61,7 +61,7 @@ const Login = () => {
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all dark:text-white"
+                            className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all dark:text-white"
                             placeholder="••••••••"
                             required
                         />
@@ -70,14 +70,14 @@ const Login = () => {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full py-4 mt-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl transition-all transform hover:scale-[1.01] shadow-lg shadow-blue-500/20"
+                        className="w-full py-4 mt-2 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white font-bold rounded-xl transition-all transform hover:scale-[1.01] shadow-lg shadow-primary-500/20"
                     >
                         {isLoading ? 'Signing In...' : 'Sign In'}
                     </button>
                 </form>
 
                 <p className="mt-8 text-center text-gray-500 text-sm font-medium">
-                    Don't have an account? <Link to="/register" className="text-blue-500 font-bold hover:underline">Create one</Link>
+                    Don't have an account? <Link to="/register" className="text-primary-500 font-bold hover:underline">Create one</Link>
                 </p>
             </div>
         </div>

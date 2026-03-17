@@ -134,19 +134,19 @@ const Market = () => {
                 <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
                     <button
                         onClick={() => { setViewMode('indices'); }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'indices' ? 'bg-white dark:bg-gray-700 shadow text-blue-600' : 'text-gray-500'}`}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'indices' ? 'bg-white dark:bg-gray-700 shadow text-primary-600' : 'text-gray-500'}`}
                     >
                         Indices
                     </button>
                     <button
                         onClick={() => setViewMode('sectors')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'sectors' ? 'bg-white dark:bg-gray-700 shadow text-blue-600' : 'text-gray-500'}`}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'sectors' ? 'bg-white dark:bg-gray-700 shadow text-primary-600' : 'text-gray-500'}`}
                     >
                         Sub-Indices
                     </button>
                     <button
                         onClick={() => { setViewMode('stocks'); setSelectedSector(null); }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'stocks' ? 'bg-white dark:bg-gray-700 shadow text-blue-600' : 'text-gray-500'}`}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'stocks' ? 'bg-white dark:bg-gray-700 shadow text-primary-600' : 'text-gray-500'}`}
                     >
                         Stocks
                     </button>
@@ -250,7 +250,7 @@ const Market = () => {
                             <div
                                 key={sector.id}
                                 onClick={() => handleSectorClick(sector.id)}
-                                className="bg-white dark:bg-gray-700 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-600 cursor-pointer hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600 transition-all"
+                                className="bg-white dark:bg-gray-700 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-600 cursor-pointer hover:shadow-md hover:border-primary-300 dark:hover:border-primary-600 transition-all"
                             >
                                 <div className="flex flex-col h-full justify-between">
                                     <div className="mb-4">
@@ -272,8 +272,8 @@ const Market = () => {
                                                     {parseFloat(subindex.change) > 0 ? '+' : ''}{parseFloat(subindex.change).toFixed(2)} ({parseFloat(subindex.change_percent).toFixed(2)}%)
                                                 </p>
                                             </div>
-                                            <div className="bg-blue-50 dark:bg-blue-900/50 p-2 rounded-lg">
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600 dark:text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                            <div className="bg-primary-50 dark:bg-primary-900/50 p-2 rounded-lg">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-600 dark:text-primary-400" viewBox="0 0 20 20" fill="currentColor">
                                                     <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                                                 </svg>
                                             </div>
@@ -298,7 +298,7 @@ const Market = () => {
                             </span>
                             <button
                                 onClick={() => setSelectedSector(null)}
-                                className="text-blue-600 dark:text-blue-400 text-sm hover:underline"
+                                className="text-primary-600 dark:text-primary-400 text-sm hover:underline"
                             >
                                 Clear Filter
                             </button>
@@ -323,13 +323,13 @@ const Market = () => {
                                         <WatchlistMarker stock={stock} />
                                     </td>
                                     <td
-                                        className="px-4 py-4 font-bold text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                                        className="px-4 py-4 font-bold text-primary-600 dark:text-primary-400 cursor-pointer hover:underline"
                                         onClick={() => handleStockClick(stock.symbol)}
                                     >
                                         {stock.symbol}
                                     </td>
                                     <td
-                                        className="px-4 py-4 text-gray-700 dark:text-gray-300 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+                                        className="px-4 py-4 text-gray-700 dark:text-gray-300 cursor-pointer hover:text-primary-600 dark:hover:text-primary-400"
                                         onClick={() => handleStockClick(stock.symbol)}
                                     >
                                         {stock.name}
@@ -343,7 +343,7 @@ const Market = () => {
                                     <td className="px-4 py-4">
                                         <button
                                             onClick={() => navigate('/trading', { state: { mode: 'buy', symbol: stock.symbol } })}
-                                            className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                                            className="bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                                         >
                                             Trade
                                         </button>
