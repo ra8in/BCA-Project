@@ -131,6 +131,14 @@ class TopGainersView(APIView):
         gainers = [s for s in all_stocks if s.get('change_percent', 0) > 0]
         gainers.sort(key=lambda x: x.get('change_percent', 0), reverse=True)
         
+        # Fallback: market closed or no trades yet → show by highest last_price
+        if not gainers:
+            gainers = sorted(
+                [s for s in all_stocks if s.get('last_price', 0) > 0],
+                key=lambda x: float(x.get('last_price', 0)),
+                reverse=True
+            )
+        
         if 'page' in request.query_params or 'limit' in request.query_params:
             paginator = self.pagination_class()
             page = paginator.paginate_queryset(gainers, request)
@@ -151,6 +159,13 @@ class TopLosersView(APIView):
         losers = [s for s in all_stocks if s.get('change_percent', 0) < 0]
         losers.sort(key=lambda x: x.get('change_percent', 0))
         
+        # Fallback: market closed or no trades yet → show by lowest last_price
+        if not losers:
+            losers = sorted(
+                [s for s in all_stocks if s.get('last_price', 0) > 0],
+                key=lambda x: float(x.get('last_price', 0))
+            )
+        
         if 'page' in request.query_params or 'limit' in request.query_params:
             paginator = self.pagination_class()
             page = paginator.paginate_queryset(losers, request)
@@ -170,6 +185,14 @@ class TopTurnoverView(APIView):
         
         turnover = [s for s in all_stocks if s.get('total_traded_value', 0) > 0]
         turnover.sort(key=lambda x: x.get('total_traded_value', 0), reverse=True)
+        
+        # Fallback: market closed (no turnover today) → show by last_price
+        if not turnover:
+            turnover = sorted(
+                [s for s in all_stocks if s.get('last_price', 0) > 0],
+                key=lambda x: float(x.get('last_price', 0)),
+                reverse=True
+            )
         
         if 'page' in request.query_params or 'limit' in request.query_params:
             paginator = self.pagination_class()

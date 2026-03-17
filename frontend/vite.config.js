@@ -8,6 +8,10 @@ export default defineConfig({
     minify: false, // Keep code readable for college project
   },
   server: {
+    watch: {
+      usePolling: true,    // Required for Docker bind-mount file watching
+      interval: 1000,      // Check every 1s (low CPU cost)
+    },
     proxy: {
       '/api': {
         target: process.env.PROXY_TARGET || 'http://127.0.0.1:8000',

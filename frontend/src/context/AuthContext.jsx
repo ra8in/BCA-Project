@@ -15,10 +15,43 @@ export const AuthProvider = ({ children }) => {
         // Add axios interceptor for 401 responses
         const interceptor = axios.interceptors.response.use(
             (response) => response,
-            (error) => {
-                if (error.response?.status === 401) {
+            async (error) => {
+                const originalRequest = error.config;
+
+                // Prevent interception on login or refresh endpoints to avoid infinite loops
+                if (originalRequest.url?.includes('/login') || originalRequest.url?.includes('/refresh')) {
+                    return Promise.reject(error);
+                }
+
+                if (error.response?.status === 401 && !originalRequest._retry) {
+                    originalRequest._retry = true;
+                    const refreshToken = localStorage.getItem('refresh_token');
+
+                    if (refreshToken) {
+                        try {
+                            const response = await axios.post('/api/accounts/token/refresh/', {
+                                refresh: refreshToken
+                            });
+
+                            const newAccessToken = response.data.access;
+                            localStorage.setItem('access_token', newAccessToken);
+
+                            // Update Authorization header for the retried request
+                            originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+                            return axios(originalRequest);
+                        } catch (refreshError) {
+                            console.error('Token refresh failed', refreshError);
+                            logout();
+                            return Promise.reject(refreshError);
+                        }
+                    } else {
+                        logout();
+                    }
+                } else if (error.response?.status === 401) {
+                    // It was 401, but we already tried to retry or no refresh logic applies
                     logout();
                 }
+
                 return Promise.reject(error);
             }
         );

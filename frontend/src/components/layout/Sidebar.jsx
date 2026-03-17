@@ -2,6 +2,26 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import MarketStatusIndicator from '../common/MarketStatusIndicator';
+import logo from '../../assets/sidebar.png';
+
+const NavLink = ({ item, collapsed, location }) => {
+    const isActive = location.pathname === item.path ||
+        (item.path !== '/' && location.pathname.startsWith(item.path));
+
+    return (
+        <Link
+            to={item.path}
+            title={collapsed ? item.label : ''}
+            className={`flex items-center gap-6 px-6 h-12 rounded-xl transition-all font-bold overflow-hidden ${isActive
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50'
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                }`}
+        >
+            <span className="text-xl w-6 flex items-center justify-center flex-shrink-0 h-full">{item.icon}</span>
+            {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+        </Link>
+    );
+};
 
 const Sidebar = ({ collapsed, onToggle }) => {
     const location = useLocation();
@@ -40,24 +60,7 @@ const Sidebar = ({ collapsed, onToggle }) => {
         { label: 'Portfolio', path: '/portfolio', icon: <i className="fas fa-wallet"></i> },
     ];
 
-    const NavLink = ({ item }) => {
-        const isActive = location.pathname === item.path ||
-            (item.path !== '/' && location.pathname.startsWith(item.path));
 
-        return (
-            <Link
-                to={item.path}
-                title={collapsed ? item.label : ''}
-                className={`flex items-center gap-6 px-6 h-12 rounded-xl transition-all font-bold overflow-hidden ${isActive
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                    }`}
-            >
-                <span className="text-xl w-6 flex items-center justify-center flex-shrink-0 h-full">{item.icon}</span>
-                {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
-            </Link>
-        );
-    };
 
     return (
         <aside
@@ -73,7 +76,7 @@ const Sidebar = ({ collapsed, onToggle }) => {
                     <i className="fas fa-bars"></i>
                 </button>
                 {!collapsed && (
-                    <h1 className="text-xl font-black text-blue-400 tracking-tight whitespace-nowrap">Paper Trader</h1>
+                    <img src={logo} alt="Nepse Paper Trading Logo" className="h-8 object-contain" />
                 )}
             </div>
 
@@ -82,12 +85,12 @@ const Sidebar = ({ collapsed, onToggle }) => {
                 <ul className="space-y-1">
                     {mainMenuItems.map((item) => (
                         <li key={item.path}>
-                            <NavLink item={item} />
+                            <NavLink item={item} collapsed={collapsed} location={location} />
                         </li>
                     ))}
                     {isAuthenticated && protectedItems.map((item) => (
                         <li key={item.path}>
-                            <NavLink item={item} />
+                            <NavLink item={item} collapsed={collapsed} location={location} />
                         </li>
                     ))}
                 </ul>
@@ -100,7 +103,7 @@ const Sidebar = ({ collapsed, onToggle }) => {
                         if (item.protected && !isAuthenticated) return null;
                         return (
                             <li key={item.path}>
-                                <NavLink item={item} />
+                                <NavLink item={item} collapsed={collapsed} location={location} />
                             </li>
                         );
                     })}
@@ -130,7 +133,7 @@ const Sidebar = ({ collapsed, onToggle }) => {
                     </div>
 
                     {isAuthenticated && (
-                        <NavLink item={{ label: 'Settings', path: '/settings', icon: <i className="fas fa-cog"></i> }} />
+                        <NavLink item={{ label: 'Settings', path: '/settings', icon: <i className="fas fa-cog"></i> }} collapsed={collapsed} location={location} />
                     )}
                 </div>
             </nav>

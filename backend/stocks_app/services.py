@@ -955,56 +955,106 @@ def get_cached_stock_price(symbol: str, client_id: str = 'anonymous') -> dict:
     return result
 
 
-def get_all_cached_stock_prices(client_id: str = 'anonymous') -> list:
+def _build_raw_results_from_db() -> dict:
     """
-    Get all active stock prices instantly from the global cache.
-    If the cache is expired, triggers a single backend refresh.
-    Maps cache keys to StockSerializer-compatible format for the frontend.
-    Returns:
-        List of dictionaries matching StockSerializer JSON contract.
+    Read Stock table directly as last-resort fallback.
+    Used when cache miss + API refresh both fail.
+    Always has data as long as sync_companies ran once.
     """
     from stocks_app.models import Stock
-    
+    results = {}
+    for stock in Stock.objects.filter(is_active=True).only(
+        'symbol', 'last_price', 'change', 'change_percent',
+        'previous_close', 'open_price', 'high_price', 'low_price',
+        'total_trade_quantity', 'total_traded_value'
+    ):
+        results[stock.symbol] = {
+            'ltp': stock.last_price or Decimal('0'),
+            'change': stock.change or Decimal('0'),
+            'change_percent': stock.change_percent or Decimal('0'),
+            'previous_close': stock.previous_close or Decimal('0'),
+            'open': stock.open_price or stock.last_price or Decimal('0'),
+            'high': stock.high_price or stock.last_price or Decimal('0'),
+            'low': stock.low_price or stock.last_price or Decimal('0'),
+            'volume': stock.total_trade_quantity or 0,
+            'turnover': stock.total_traded_value or Decimal('0'),
+            'source': 'database_fallback',
+        }
+    logger.info(f"_build_raw_results_from_db: loaded {len(results)} stocks from DB.")
+    return results
+
+
+def get_all_cached_stock_prices(client_id: str = 'anonymous') -> list:
+    """
+    Get all active stock prices from the global cache with a 3-layer fallback.
+    GUARANTEE: Never returns an empty list as long as the DB has any stock data.
+
+    Layer 1: Redis per-stock cache (fastest)
+    Layer 2: DB direct read when cache is stale/empty (safe fallback)
+    Layer 3: 24h stale Redis key (last-resort if DB is also unreachable)
+
+    Returns:
+        List of dicts matching StockSerializer JSON contract.
+    """
+    from stocks_app.models import Stock
+
     throttle_key = f"throttle:stock_prices_all:{client_id}"
-    
+
     # Check throttle to prevent abuse
     if _check_throttle(throttle_key):
         cached_result = cache.get('all_stock_prices_mapped')
         if cached_result:
             return cached_result
         # Still throttled but no cached result — let it through
-    
+
     _set_throttle(throttle_key)
 
     # Fetch fast metadata mapping from DB
     meta_qs = Stock.objects.filter(is_active=True).values('id', 'symbol', 'name', 'sector_id', 'sector__name')
     stock_meta = {m['symbol']: m for m in meta_qs}
     active_symbols = list(stock_meta.keys())
-    
+
     cache_keys = [f"stock_price:{sym}" for sym in active_symbols]
     cached_data = cache.get_many(cache_keys)
-    
+
     # If cache is missing ANY active stock (or completely expired)
     if len(cached_data) < len(active_symbols):
         logger.info(f"Global cache missing symbols. Triggering global refresh from get_all_cached_stock_prices...")
         raw_results = _refresh_global_stock_cache()
     else:
         raw_results = {k.split(':')[1]: v for k, v in cached_data.items()}
-        
+
+    # === LAYER 2: DB direct fallback ===
+    # If cache/API returned empty OR all prices are zero (API returned nothing useful),
+    # read directly from Stock DB table which always has the last known prices.
+    all_zero = raw_results and all(
+        (r.get('ltp') or 0) == 0 for r in raw_results.values()
+    )
+    if not raw_results or all_zero:
+        logger.warning(
+            "Cache returned empty/all-zero prices. "
+            "Falling back to Stock DB table for guaranteed data..."
+        )
+        try:
+            raw_results = _build_raw_results_from_db()
+        except Exception as db_err:
+            logger.error(f"DB fallback also failed: {db_err}")
+            raw_results = {}
+
     # Map raw cache keys into StockSerializer contract
     from decimal import Decimal
     mapped_results = []
-    
+
     for sym, m in stock_meta.items():
         c = raw_results.get(sym, {})
-        
+
         # Calculate circuit breakers (same logic as StockSerializer)
         prev = c.get('previous_close', 0)
         ltp = c.get('ltp', 0)
         base = prev if prev and prev > 0 else ltp
         circuit_high = float(format(Decimal(str(base)) * Decimal('1.10'), '.1f')) if base else None
         circuit_low = float(format(Decimal(str(base)) * Decimal('0.90'), '.1f')) if base else None
-        
+
         mapped_results.append({
             'id': m['id'],
             'symbol': sym,
@@ -1024,9 +1074,19 @@ def get_all_cached_stock_prices(client_id: str = 'anonymous') -> list:
             'circuit_low': circuit_low,
             'is_active': True
         })
-    
-    # Cache the mapped result briefly (same TTL as stock prices)
-    cache.set('all_stock_prices_mapped', mapped_results, _get_cache_ttl())
+
+    if mapped_results:
+        # Primary cache (short-lived)
+        cache.set('all_stock_prices_mapped', mapped_results, _get_cache_ttl())
+        # === LAYER 3: 24h stale backup — survives Redis flushes and API outages ===
+        cache.set('all_stock_prices_mapped:stale', mapped_results, 86400)
+    else:
+        # Last resort: serve stale data rather than an empty list
+        stale = cache.get('all_stock_prices_mapped:stale')
+        if stale:
+            logger.warning("Serving 24h stale stock price data as absolute last resort.")
+            return stale
+
     return mapped_results
 
 

@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from decimal import Decimal
 
@@ -11,10 +12,13 @@ from .serializers import (
     HoldingSerializer, PortfolioSummarySerializer, PortfolioSnapshotSerializer, 
     OrderSerializer, WatchlistGroupSerializer, WatchlistItemSerializer
 )
+from .fees import calculate_buy_fees, calculate_sell_fees
 from stocks_app.models import Stock
 from stocks_app.tasks import trigger_market_data_update
 from stocks_app.market_hours import is_market_open
 from trading_app.models import Order, Transaction
+
+User = get_user_model()
 
 
 class WatchlistGroupViewSet(viewsets.ModelViewSet):
@@ -188,40 +192,83 @@ class BuyStockView(APIView):
                 if order_type == 'MARKET':
                     should_execute = True
                     execution_price = current_price
+                    # Check market depth to see how many sell orders are available
+                    try:
+                        from stocks_app.services import get_cached_market_depth
+                        depth = get_cached_market_depth(symbol)
+                        # Explicitly handle error dicts returned by depth service
+                        if depth.get('error') or not depth.get('marketDepth'):
+                            available_sell_qty = 0
+                        else:
+                            sell_list = depth['marketDepth'].get('sellMarketDepthList', [])
+                            available_sell_qty = sum(row.get('quantity', 0) for row in sell_list)
+                    except Exception:
+                        # Depth fetch failed — conservatively assume no sellers, keep as PENDING
+                        available_sell_qty = 0
+                    
+                    if available_sell_qty == 0:
+                        # No sellers in depth — place entire order as pending at current price
+                        fill_qty = 0
+                        pending_qty = quantity
+                        should_execute = False
+                    elif available_sell_qty < quantity:
+                        # Partial fill: execute what's available, place rest as pending limit
+                        fill_qty = available_sell_qty
+                        pending_qty = quantity - fill_qty
+                    else:
+                        # Full fill
+                        fill_qty = quantity
+                        pending_qty = 0
                 elif order_type == 'LIMIT':
                     if not price_input:
                          return Response({'error': 'Price required for Limit Order'}, status=status.HTTP_400_BAD_REQUEST)
                     limit_price = Decimal(price_input)
-                    # Buy Limit executes if current price is <= limit price
+                    # Buy Limit: price condition met AND sellers must exist in depth
                     if current_price <= limit_price:
-                        should_execute = True
-                        execution_price = current_price # Execute at best available price (market)
+                        # Check if there are actual sellers in the order book
+                        try:
+                            from stocks_app.services import get_cached_market_depth
+                            depth = get_cached_market_depth(symbol)
+                            if depth.get('error') or not depth.get('marketDepth'):
+                                sell_depth_qty = 0
+                            else:
+                                sell_list = depth['marketDepth'].get('sellMarketDepthList', [])
+                                sell_depth_qty = sum(row.get('quantity', 0) for row in sell_list)
+                        except Exception:
+                            sell_depth_qty = 0
+
+                        if sell_depth_qty > 0:
+                            should_execute = True
+                            execution_price = current_price  # Execute at best available price
+                        else:
+                            # Price condition met but no sellers — keep as PENDING
+                            should_execute = False
                     else:
                         should_execute = False
+                    fill_qty = quantity
+                    pending_qty = 0
                 
-                # 3. Handle Pending
+                # 3. Handle fully Pending orders (LIMIT not yet in range)
                 if not should_execute:
-                    # Trigger price update even for pending orders!
                     trigger_market_data_update()
-                    
+                    order.status = 'PENDING'
+                    order.save()
                     return Response({
                         'message': f'Buy Limit Order placed for {quantity} {symbol} at Rs. {price_input}. Status: PENDING',
                         'order': {'id': order.id, 'status': 'PENDING'},
                         'new_balance': float(request.user.virtual_balance)
                     }, status=status.HTTP_201_CREATED)
         
-                # 4. Execute Order
-                amount = execution_price * quantity
+                # 4. Execute Order (for fill_qty shares)
+                amount = execution_price * fill_qty
                 
-                # Calculate fees
-                commission = max(Decimal('10'), amount * Decimal('0.004'))
-                sebon_fee = amount * Decimal('0.00015')
-                dp_fee = Decimal('25')
-                total_fees = commission + sebon_fee + dp_fee
+                # Calculate fees (centralized)
+                total_fees, _ = calculate_buy_fees(amount)
                 total_cost = amount + total_fees
-                effective_price = total_cost / quantity
+                effective_price = total_cost / fill_qty
                 
-                user = request.user
+                # Lock user row to prevent concurrent balance race condition
+                user = User.objects.select_for_update().get(pk=request.user.pk)
                 if user.virtual_balance < total_cost:
                     order.status = 'REJECTED'
                     order.save()
@@ -237,17 +284,18 @@ class BuyStockView(APIView):
                 )
                 
                 if not created:
-                    total_shares = holding.quantity + quantity
-                    total_cost_basis = (holding.average_buy_price * holding.quantity) + (effective_price * quantity)
+                    total_shares = holding.quantity + fill_qty
+                    total_cost_basis = (holding.average_buy_price * holding.quantity) + (effective_price * fill_qty)
                     holding.average_buy_price = total_cost_basis / total_shares
                     holding.quantity = total_shares
                 else:
-                    holding.quantity = quantity
+                    holding.quantity = fill_qty
                     holding.average_buy_price = effective_price
                 
                 holding.save()
                 
-                # Update Order
+                # Update Order status
+                order.quantity = fill_qty  # Update to the actually filled quantity
                 order.status = 'EXECUTED'
                 order.save()
                 
@@ -257,7 +305,7 @@ class BuyStockView(APIView):
                     stock=stock,
                     order=order,
                     transaction_type='BUY',
-                    quantity=quantity,
+                    quantity=fill_qty,
                     price=execution_price,
                     total_amount=amount,
                     fees=total_fees,
@@ -265,14 +313,31 @@ class BuyStockView(APIView):
                     wacc_at_sell=None,
                     realized_pl=None
                 )
+                
+                # 5. If partial fill, place remaining as PENDING LIMIT order at execution price
+                pending_order = None
+                if pending_qty > 0:
+                    pending_order = Order.objects.create(
+                        user=user,
+                        stock=stock,
+                        order_type='BUY',
+                        order_mode='LIMIT',
+                        quantity=pending_qty,
+                        price=execution_price,
+                        status='PENDING'
+                    )
             
-            # Trigger async update of ALL stock prices in database
             trigger_market_data_update()
             
+            msg = f'Successfully bought {fill_qty} shares of {symbol} at Rs. {execution_price}'
+            if pending_qty > 0:
+                msg += f'. Remaining {pending_qty} shares placed as Pending Limit at Rs. {execution_price} (insufficient sell depth).'
+            
             return Response({
-                'message': f'Successfully bought {quantity} shares of {symbol} at Rs. {execution_price}',
+                'message': msg,
                 'holding': HoldingSerializer(holding).data,
-                'new_balance': float(user.virtual_balance)
+                'new_balance': float(user.virtual_balance),
+                'pending_order': {'id': pending_order.id, 'qty': pending_qty} if pending_order else None
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
@@ -309,16 +374,9 @@ class SellStockView(APIView):
             except Stock.DoesNotExist:
                 return Response({'error': 'Stock not found'}, status=status.HTTP_404_NOT_FOUND)
             
-            user = request.user
-            
-            # 1. Verification (Do they own it?)
-            try:
-                holding = Holding.objects.get(user=user, stock=stock)
-            except Holding.DoesNotExist:
+            # Pre-check ownership (non-locked read for fast validation)
+            if not Holding.objects.filter(user=request.user, stock=stock).exists():
                 return Response({'error': 'You do not own this stock'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            if holding.quantity < quantity:
-                return Response({'error': 'Insufficient shares'}, status=status.HTTP_400_BAD_REQUEST)
                 
             current_price = stock.last_price
             if current_price is None:
@@ -359,93 +417,152 @@ class SellStockView(APIView):
                     status='PENDING'
                 )
         
-            # 3. Check Execution
-            if order_type == 'MARKET':
-                should_execute = True
-                execution_price = current_price
-            elif order_type == 'LIMIT':
-                if not price_input:
-                     return Response({'error': 'Price required for Limit Order'}, status=status.HTTP_400_BAD_REQUEST)
-                limit_price = Decimal(price_input)
-                # Sell Limit executes if market price is >= limit price (Sell at Limit or Higher)
-                if current_price >= limit_price:
+                # 3. Check Execution Condition
+                if order_type == 'MARKET':
                     should_execute = True
-                    execution_price = current_price # Execute at best available (Market)
-                else:
-                    should_execute = False # Pending until price rises
-            
-            # 4. Handle Pending
-            if not should_execute:
-                # Trigger price update even for pending orders!
-                trigger_market_data_update()
-                
-                return Response({
-                    'message': f'Sell Limit Order placed for {quantity} {symbol} at Rs. {price_input}. Status: PENDING',
-                    'order': {'id': order.id, 'status': 'PENDING'},
-                    'new_balance': float(request.user.virtual_balance)
-                }, status=status.HTTP_201_CREATED)
+                    execution_price = current_price
+                    # Check market depth: how many buy orders are available
+                    try:
+                        from stocks_app.services import get_cached_market_depth
+                        depth = get_cached_market_depth(symbol)
+                        # Explicitly handle error dicts returned by depth service
+                        if depth.get('error') or not depth.get('marketDepth'):
+                            available_buy_qty = 0
+                        else:
+                            buy_list = depth['marketDepth'].get('buyMarketDepthList', [])
+                            available_buy_qty = sum(row.get('quantity', 0) for row in buy_list)
+                    except Exception:
+                        # Depth fetch failed — conservatively assume no buyers, keep as PENDING
+                        available_buy_qty = 0
+                    
+                    if available_buy_qty == 0:
+                        # No buyers in depth — place entire order as pending at current price
+                        fill_qty = 0
+                        pending_qty = quantity
+                        should_execute = False
+                    elif available_buy_qty < quantity:
+                        fill_qty = available_buy_qty
+                        pending_qty = quantity - fill_qty
+                    else:
+                        # Full fill
+                        fill_qty = quantity
+                        pending_qty = 0
+                elif order_type == 'LIMIT':
+                    if not price_input:
+                        return Response({'error': 'Price required for Limit Order'}, status=status.HTTP_400_BAD_REQUEST)
+                    limit_price = Decimal(price_input)
+                    # Sell Limit: price condition met AND buyers must exist in depth
+                    if current_price >= limit_price:
+                        # Check if there are actual buyers in the order book
+                        try:
+                            from stocks_app.services import get_cached_market_depth
+                            depth = get_cached_market_depth(symbol)
+                            if depth.get('error') or not depth.get('marketDepth'):
+                                buy_depth_qty = 0
+                            else:
+                                buy_list = depth['marketDepth'].get('buyMarketDepthList', [])
+                                buy_depth_qty = sum(row.get('quantity', 0) for row in buy_list)
+                        except Exception:
+                            buy_depth_qty = 0
 
-            # 5. Execute Order
-            gross_amount = execution_price * quantity
-            
-            # Calculate Fees
-            commission = max(Decimal('10'), gross_amount * Decimal('0.004'))
-            sebon_fee = gross_amount * Decimal('0.00015')
-            dp_fee = Decimal('25')
-            
-            # CGT Calculation: 5% of Profit
-            wacc = holding.average_buy_price
-            cost_basis = wacc * quantity
-            gross_profit = gross_amount - cost_basis
-            
-            cgt = Decimal('0')
-            if gross_profit > 0:
-                cgt = gross_profit * Decimal('0.05') # 5% CGT
-            
-            total_deductions = commission + sebon_fee + dp_fee + cgt
-            net_proceeds = gross_amount - total_deductions
-            
-            # Update User Balance
-            user.virtual_balance += net_proceeds
-            user.save()
-            
-            # Update Holding
-            remaining_qty = holding.quantity - quantity
-            if remaining_qty == 0:
-                holding.delete()
-            else:
-                holding.quantity = remaining_qty
-                holding.save()
+                        if buy_depth_qty > 0:
+                            should_execute = True
+                            execution_price = current_price
+                        else:
+                            # Price condition met but no buyers — keep as PENDING
+                            should_execute = False
+                    else:
+                        should_execute = False
+                    fill_qty = quantity
+                    pending_qty = 0
                 
-            # Update Order
-            order.status = 'EXECUTED'
-            order.save()
+                # 4. Handle Pending (LIMIT not yet in range)
+                if not should_execute:
+                    trigger_market_data_update()
+                    return Response({
+                        'message': f'Sell Limit Order placed for {quantity} {symbol} at Rs. {price_input}. Status: PENDING',
+                        'order': {'id': order.id, 'status': 'PENDING'},
+                        'new_balance': float(request.user.virtual_balance)
+                    }, status=status.HTTP_201_CREATED)
+
+                # 5. Execute Order (for fill_qty shares)
+                gross_amount = execution_price * fill_qty
+                
+                # Lock user and holding rows to prevent concurrent race condition
+                user = User.objects.select_for_update().get(pk=request.user.pk)
+                holding = Holding.objects.select_for_update().get(user=user, stock=stock)
+                
+                # Re-verify shares under lock
+                if holding.quantity < fill_qty:
+                    return Response({'error': 'Insufficient shares'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Calculate Fees (centralized)
+                wacc = holding.average_buy_price
+                cost_basis = wacc * fill_qty
+                gross_profit = gross_amount - cost_basis
+                total_deductions, _ = calculate_sell_fees(gross_amount, gross_profit)
+                net_proceeds = gross_amount - total_deductions
+                
+                # Update User Balance
+                user.virtual_balance += net_proceeds
+                user.save()
+                
+                # Update Holding
+                remaining_qty = holding.quantity - fill_qty
+                if remaining_qty == 0:
+                    holding.delete()
+                else:
+                    holding.quantity = remaining_qty
+                    holding.save()
+                    
+                # Update Order (with filled quantity)
+                order.quantity = fill_qty
+                order.status = 'EXECUTED'
+                order.save()
+                
+                # Realized P/L
+                realized_pl = net_proceeds - cost_basis
+                
+                # Create Transaction Record
+                Transaction.objects.create(
+                    user=user,
+                    stock=stock,
+                    order=order,
+                    transaction_type='SELL',
+                    quantity=fill_qty,
+                    price=execution_price,
+                    total_amount=gross_amount,
+                    fees=total_deductions,
+                    net_amount=net_proceeds,
+                    wacc_at_sell=wacc,
+                    realized_pl=realized_pl
+                )
+                
+                # 6. If partial fill, place remaining as PENDING LIMIT at current price
+                pending_order = None
+                if pending_qty > 0:
+                    pending_order = Order.objects.create(
+                        user=user,
+                        stock=stock,
+                        order_type='SELL',
+                        order_mode='LIMIT',
+                        quantity=pending_qty,
+                        price=execution_price,
+                        status='PENDING'
+                    )
             
-            # Realized P/L = Net Proceeds - Cost Basis
-            realized_pl = net_proceeds - cost_basis
-            
-            # Create Transaction Record
-            Transaction.objects.create(
-                user=user,
-                stock=stock,
-                order=order,
-                transaction_type='SELL',
-                quantity=quantity,
-                price=execution_price,
-                total_amount=gross_amount,
-                fees=total_deductions,
-                net_amount=net_proceeds,
-                wacc_at_sell=wacc,
-                realized_pl=realized_pl
-            )
-            
-            # Trigger async update of ALL stock prices in database
             trigger_market_data_update()
          
+            msg = f'Successfully sold {fill_qty} shares of {symbol} at Rs. {execution_price}. Net: Rs. {net_proceeds:,.2f}'
+            if pending_qty > 0:
+                msg += f'. Remaining {pending_qty} shares placed as Pending Limit at Rs. {execution_price} (insufficient buy depth).'
+            
             return Response({
-            'message': f'Successfully sold {quantity} shares of {symbol} at Rs. {execution_price}. Net: Rs. {net_proceeds:,.2f}',
-            'new_balance': float(user.virtual_balance)
-         }, status=status.HTTP_201_CREATED)
+                'message': msg,
+                'new_balance': float(user.virtual_balance),
+                'pending_order': {'id': pending_order.id, 'qty': pending_qty} if pending_order else None
+            }, status=status.HTTP_201_CREATED)
+
         
         except Exception as e:
             import traceback
@@ -654,39 +771,63 @@ class UpdateOrderView(APIView):
                     should_execute = True
                     execution_price = current_price if current_price > price else price
             
+            # Before executing, verify market depth like BuyStockView/SellStockView do
+            if should_execute:
+                try:
+                    from stocks_app.services import get_cached_market_depth
+                    depth = get_cached_market_depth(stock.symbol)
+                    if depth.get('error') or not depth.get('marketDepth'):
+                        depth_qty = 0
+                    else:
+                        if order.order_type == 'BUY':
+                            depth_list = depth['marketDepth'].get('sellMarketDepthList', [])
+                        else:
+                            depth_list = depth['marketDepth'].get('buyMarketDepthList', [])
+                        depth_qty = sum(row.get('quantity', 0) for row in depth_list)
+                except Exception:
+                    depth_qty = 0
+
+                if depth_qty == 0:
+                    # No counterparty depth — keep as PENDING, don't execute
+                    should_execute = False
+
             if should_execute:
                 with transaction.atomic():
                     # Refresh order to lock
                     order.refresh_from_db()
                     if order.status != 'PENDING': return Response({'message': 'Order updated'}, status=status.HTTP_200_OK)
 
-                    realized_pl = None # Default
+                    # Lock user row to prevent concurrent balance race condition
+                    user = User.objects.select_for_update().get(pk=request.user.pk)
+                    realized_pl = None  # Default
                     
                     if order.order_type == 'BUY':
-                         # Calculate Cost
+                        # Calculate Cost (centralized fees)
                         amount = execution_price * order.quantity
-                        commission = max(Decimal('10'), amount * Decimal('0.004'))
-                        sebon_fee = amount * Decimal('0.00015')
-                        dp_fee = Decimal('25')
-                        total_fees = commission + sebon_fee + dp_fee
+                        total_fees, _ = calculate_buy_fees(amount)
                         total_cost = amount + total_fees
+                        effective_price = total_cost / order.quantity
                         
-                        if request.user.virtual_balance < total_cost:
+                        if user.virtual_balance < total_cost:
                              return Response({'error': 'Insufficient funds for execution'}, status=status.HTTP_400_BAD_REQUEST)
                         
                         # Deduct Balance
-                        request.user.virtual_balance -= total_cost
-                        request.user.save()
+                        user.virtual_balance -= total_cost
+                        user.save()
                         
-                        # Update/Create Holding
-                        holding, created = Holding.objects.get_or_create(user=request.user, stock=stock)
+                        # Update/Create Holding (with proper defaults)
+                        holding, created = Holding.objects.get_or_create(
+                            user=user,
+                            stock=stock,
+                            defaults={'quantity': 0, 'average_buy_price': Decimal('0')}
+                        )
                         if created:
                             holding.quantity = order.quantity
-                            holding.average_buy_price = total_cost / order.quantity
+                            holding.average_buy_price = effective_price
                         else:
                             # Weighted Average
                             total_current_cost = holding.average_buy_price * holding.quantity
-                            new_total_cost = total_current_cost + total_cost
+                            new_total_cost = total_current_cost + (effective_price * order.quantity)
                             new_total_qty = holding.quantity + order.quantity
                             holding.average_buy_price = new_total_cost / new_total_qty
                             holding.quantity = new_total_qty
@@ -696,31 +837,25 @@ class UpdateOrderView(APIView):
                         final_fees = total_fees
                         
                     elif order.order_type == 'SELL':
-                        # Already validated holding existence above
+                        # Lock holding row to prevent concurrent sell race
+                        holding = Holding.objects.select_for_update().get(user=user, stock=stock)
+
+                        # Re-verify shares under lock
+                        if holding.quantity < order.quantity:
+                            return Response({'error': 'Insufficient shares for execution'}, status=status.HTTP_400_BAD_REQUEST)
+
                         amount = execution_price * order.quantity
-                        commission = max(Decimal('10'), amount * Decimal('0.004'))
-                        sebon_fee = amount * Decimal('0.00015')
-                        dp_fee = Decimal('25')
-                        total_deductions = commission + sebon_fee + dp_fee
                         
-                        # Capital Gains Tax
-                        holding = Holding.objects.get(user=request.user, stock=stock)
+                        # Calculate Fees (centralized — uses correct 5% CGT)
                         wacc = holding.average_buy_price
                         cost_basis = wacc * order.quantity
-                        gross_price = execution_price * order.quantity # Gross amount
-                        
-                        # CGT
-                        capital_gain = gross_price - cost_basis
-                        cgt = Decimal('0')
-                        if capital_gain > 0:
-                            cgt = capital_gain * Decimal('0.075') # 7.5%
-                        
-                        total_deductions += cgt
+                        gross_profit = amount - cost_basis
+                        total_deductions, _ = calculate_sell_fees(amount, gross_profit)
                         net_proceeds = amount - total_deductions
                         
                         # Update Balance
-                        request.user.virtual_balance += net_proceeds
-                        request.user.save()
+                        user.virtual_balance += net_proceeds
+                        user.save()
                         
                         # Update Holding
                         if holding.quantity == order.quantity:
@@ -739,7 +874,7 @@ class UpdateOrderView(APIView):
                     order.save()
                     
                     Transaction.objects.create(
-                        user=request.user,
+                        user=user,
                         stock=stock,
                         order=order,
                         transaction_type=order.order_type,

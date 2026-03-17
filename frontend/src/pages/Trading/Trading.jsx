@@ -35,8 +35,9 @@ const Trading = () => {
     const [selectedStockData, setSelectedStockData] = useState(null);
 
     const [holdings, setHoldings] = useState([]);
+    // eslint-disable-next-line no-unused-vars
     const [cashBalance, setCashBalance] = useState(0);
-    const { updateSector, updateStock } = useContext(MarketContext);
+    const { stocks, updateSector, updateStock } = useContext(MarketContext);
 
     // Order History State
     const [activeOrders, setActiveOrders] = useState([]);
@@ -142,6 +143,10 @@ const Trading = () => {
         }
     };
 
+    // Watchlist Item Removal Confirmation State
+    const [showWlConfirm, setShowWlConfirm] = useState(false);
+    const [wlItemToRemove, setWlItemToRemove] = useState(null);
+
     // Watchlist Add/Remove/Search
     const wlHandleSearch = async (query) => {
         setWlSearchQuery(query);
@@ -167,11 +172,19 @@ const Trading = () => {
         }
     };
 
-    const wlHandleRemove = async (e, itemId) => {
+    const wlHandleRemoveClick = (e, item) => {
         e.stopPropagation();
+        setWlItemToRemove(item);
+        setShowWlConfirm(true);
+    };
+
+    const handleWlRemoveConfirm = async () => {
+        if (!wlItemToRemove) return;
         try {
-            await watchlistService.removeItem(itemId);
-            setWlItems(prev => prev.filter(i => i.id !== itemId));
+            await watchlistService.removeItem(wlItemToRemove.id);
+            setWlItems(prev => prev.filter(i => i.id !== wlItemToRemove.id));
+            setShowWlConfirm(false);
+            setWlItemToRemove(null);
         } catch (err) {
             console.error("Failed to remove item", err);
         }
@@ -234,6 +247,7 @@ const Trading = () => {
     const [calcLoading, setCalcLoading] = useState(false);
 
     const [showConfirm, setShowConfirm] = useState(false);
+    const [confirmingCancelId, setConfirmingCancelId] = useState(null);
 
     const [editingOrder, setEditingOrder] = useState(null);
     const [isMarketOpen, setIsMarketOpen] = useState(false);
@@ -458,12 +472,11 @@ const Trading = () => {
         }
     };
 
-    const handleCancelOrder = async (orderToCancel) => {
-        if (!window.confirm("Are you sure you want to cancel this order?")) return;
-
+    const handleCancelOrder = async (orderId) => {
         try {
-            const result = await portfolioService.cancelOrder(orderToCancel.id);
+            const result = await portfolioService.cancelOrder(orderId);
             showToast(result.message, 'success');
+            setConfirmingCancelId(null);
             fetchOrders();
         } catch (error) {
             console.error("Cancel Failed:", error);
@@ -560,49 +573,76 @@ const Trading = () => {
         <div className="max-w-7xl mx-auto px-4 py-8 relative">
             {/* Toast Notification */}
             {toast.show && (
-                <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-xl shadow-lg font-bold text-sm animate-in fade-in slide-in-from-right-4 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
+                <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-xl shadow-lg font-bold text-sm animate-in fade-in slide-in-from-right-4 ${toast.type === 'error' ? 'bg-red-500 text-white' :
+                    toast.type === 'info' ? 'bg-blue-500 text-white shadow-blue-500/20' :
+                        toast.type === 'warning' || toast.type === 'orange' ? 'bg-orange-500 text-white' :
+                            'bg-green-500 text-white'
                     }`}>
                     {toast.message}
                 </div>
-            )}
-
-
-            <h2 className="text-3xl font-black mb-8 text-gray-800 dark:text-gray-100 tracking-tight">Trading Center</h2>
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_260px] gap-6 items-start mb-8">
+            )}            <h2 className="text-3xl font-black mb-8 text-gray-800 dark:text-gray-100 tracking-tight">Trading Center</h2>
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_260px] gap-6 mb-8">
                 {/* LEFT COLUMN: Main Broker Card */}
-                <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+                <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden relative">
                     {/* Header Phase */}
-                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Place Order</h2>
-                            <span className={`text-[10px] font-bold uppercase ${isMarketOpen ? 'text-green-500 bg-green-500/10' : 'text-red-500 bg-red-500/10'} px-2 py-0.5 rounded-full flex items-center gap-1.5`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${isMarketOpen ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-                                {isMarketOpen ? 'Live' : 'Closed'}
-                            </span>
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex flex-col gap-3 bg-gray-50/50 dark:bg-gray-800/50">
+                        {/* Top Row: Title, Market Status, and Trade Toggle */}
+                        <div className="flex justify-between items-center w-full min-w-0">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white shrink-0">Place Order</h2>
+                                <span className={`text-[10px] font-bold uppercase ${isMarketOpen ? 'text-green-500 bg-green-500/10' : 'text-red-500 bg-red-500/10'} px-2 py-0.5 rounded-full flex items-center gap-1.5 shrink-0`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${isMarketOpen ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                    {isMarketOpen ? 'Live' : 'Closed'}
+                                </span>
+                            </div>
+
+                            {/* Trade Toggle Capsule */}
+                            <div className="flex relative bg-gray-100 dark:bg-gray-900 rounded-full p-1 w-24 border border-gray-200 dark:border-gray-700 shrink-0 ml-2">
+                                {/* Slider background */}
+                                <div
+                                    className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full transition-all duration-300 z-0 shadow-sm ${!mode ? 'opacity-0' : 'opacity-100'
+                                        } ${mode === 'sell' ? 'translate-x-[calc(100%+4px)] bg-red-500' : 'translate-x-0 bg-blue-600'
+                                        }`}
+                                ></div>
+
+                                <button
+                                    onClick={() => handleModeSelect('buy')}
+                                    className={`flex-1 relative z-10 py-1 text-xs font-bold transition-colors ${mode === 'buy' ? 'text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                                >
+                                    BUY
+                                </button>
+                                <button
+                                    onClick={() => handleModeSelect('sell')}
+                                    className={`flex-1 relative z-10 py-1 text-xs font-bold transition-colors ${mode === 'sell' ? 'text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                                >
+                                    SELL
+                                </button>
+                            </div>
                         </div>
 
-                        {/* Trade Toggle Capsule */}
-                        <div className="flex relative bg-gray-100 dark:bg-gray-900 rounded-full p-1 w-24 border border-gray-200 dark:border-gray-700">
-                            {/* Slider background */}
-                            <div
-                                className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full transition-all duration-300 z-0 shadow-sm ${!mode ? 'opacity-0' : 'opacity-100'
-                                    } ${mode === 'sell' ? 'translate-x-[calc(100%+4px)] bg-red-500' : 'translate-x-0 bg-blue-600'
-                                    }`}
-                            ></div>
+                        {/* Selected Scrip Info Header - Second Row */}
+                        {selectedStockData && (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3 rounded-2xl shadow-sm">
+                                <span className="text-sm font-bold text-gray-900 dark:text-white whitespace-normal break-words flex-1 pr-2">
+                                    {selectedStockData.name} ({selectedStockData.symbol})
+                                </span>
 
-                            <button
-                                onClick={() => handleModeSelect('buy')}
-                                className={`flex-1 relative z-10 py-1 text-xs font-bold transition-colors ${mode === 'buy' ? 'text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
-                            >
-                                BUY
-                            </button>
-                            <button
-                                onClick={() => handleModeSelect('sell')}
-                                className={`flex-1 relative z-10 py-1 text-xs font-bold transition-colors ${mode === 'sell' ? 'text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
-                            >
-                                SELL
-                            </button>
-                        </div>
+                                {/* Price Pill */}
+                                <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 px-3 py-1.5 rounded-full shrink-0 shadow-inner">
+                                    <span className="text-sm font-black text-gray-900 dark:text-white">
+                                        Rs. {parseFloat(selectedStockData.last_price || 0).toLocaleString()}
+                                    </span>
+                                    <span className={`text-xs font-bold flex items-center ${parseFloat(selectedStockData.change_percent || 0) > 0 ? 'text-green-500' : parseFloat(selectedStockData.change_percent || 0) < 0 ? 'text-red-500' : 'text-gray-500'}`}>
+                                        {parseFloat(selectedStockData.change_percent || 0) > 0 ? (
+                                            <svg className="w-3 h-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                                        ) : parseFloat(selectedStockData.change_percent || 0) < 0 ? (
+                                            <svg className="w-3 h-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                                        ) : null}
+                                        {Math.abs(parseFloat(selectedStockData.change_percent || 0)).toFixed(2)}%
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Form & Actions Phase */}
@@ -690,29 +730,37 @@ const Trading = () => {
                             <div className="flex flex-col md:flex-row items-center justify-end pb-4 border-b border-gray-100 dark:border-gray-700 gap-3 mb-4">
 
                                 {/* Info Blocks */}
-                                <div className="flex gap-4">
-                                    <div className="flex flex-col items-center gap-1">
-                                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{mode === 'sell' ? 'Net Receivable' : 'Total Payable'}</span>
-                                        <strong className="text-sm text-gray-900 dark:text-white font-black">
+                                <div className="flex gap-4 items-center">
+                                    <div className="flex flex-col items-start gap-1 w-48 overflow-hidden">
+                                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider truncate w-full">{mode === 'sell' ? 'Net Receivable' : 'Total Payable'}</span>
+                                        <strong className="text-sm text-gray-900 dark:text-white font-black truncate">
                                             {calcResult ? `Rs. ${mode === 'sell' ? parseFloat(calcResult.net_receivable).toLocaleString() : parseFloat(calcResult.total_cost).toLocaleString()}` : '0.00'}
                                         </strong>
                                     </div>
-                                    <div className="flex flex-col items-center gap-1">
-                                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Avail. Balance</span>
-                                        <strong className="text-sm text-green-600 dark:text-green-400 font-black">
-                                            Rs. {cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </strong>
-                                    </div>
-                                    <div className="flex flex-col items-center gap-1 hidden sm:flex">
+
+                                    <div className="flex flex-col items-start gap-1 w-24 hidden sm:flex border-l border-gray-100 dark:border-gray-700 pl-4">
                                         <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">LTP</span>
                                         <strong className="text-sm text-gray-900 dark:text-white font-black">
                                             {LTP ? `Rs. ${LTP.toLocaleString()}` : '---'}
                                         </strong>
                                     </div>
+
+                                    {LTP > 0 && (
+                                        <div className="flex flex-col gap-0.5 border-l border-gray-100 dark:border-gray-700 pl-3">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-[9px] font-bold text-green-500/80 uppercase tracking-wider">+2% HIGH</span>
+                                                <span className="text-[10px] font-black text-green-600 dark:text-green-400">{(LTP * 1.02).toFixed(1)}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-[9px] font-bold text-red-500/80 uppercase tracking-wider">-2% LOW</span>
+                                                <span className="text-[10px] font-black text-red-600 dark:text-red-400">{(LTP * 0.98).toFixed(1)}</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Action Buttons */}
-                                <div className="flex gap-3">
+                                <div className="flex gap-3 ml-auto">
                                     <button
                                         onClick={() => setShowConfirm(true)}
                                         disabled={calcLoading || !order.symbol || !order.qty || (!order.price && order.type === 'limit') || (mode === 'sell' && order.qty > availableQty) || !mode}
@@ -725,7 +773,7 @@ const Trading = () => {
                                             setOrder({ symbol: '', qty: '', price: '', type: 'market' });
                                             setMode('buy');
                                         }}
-                                        className="px-6 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-xs transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
                                     >
                                         RESET
                                     </button>
@@ -759,11 +807,15 @@ const Trading = () => {
                                             ))}
                                         </tbody>
                                         <tfoot>
-                                            <tr className="bg-gray-50 dark:bg-gray-800 font-bold border-t border-gray-200 dark:border-gray-700 text-blue-600">
-                                                <td className="py-1.5 px-3 text-left">Total Qty</td>
-                                                <td colSpan="2" className="py-1.5 px-3 text-right">
-                                                    {marketDepth.marketDepth.buyMarketDepthList.reduce((acc, row) => acc + (row.quantity || 0), 0)}
+                                            <tr className="bg-gray-50 dark:bg-gray-800 font-bold border-t border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white">
+                                                <td className="py-2 px-3 text-left">Total Buy Qty</td>
+                                                <td className="py-2 text-right">
+                                                    {marketDepth.totalBuyQty != null
+                                                        ? marketDepth.totalBuyQty.toLocaleString()
+                                                        : marketDepth.marketDepth.buyMarketDepthList.reduce((acc, row) => acc + (row.quantity || 0), 0).toLocaleString()
+                                                    }
                                                 </td>
+                                                <td className="py-2 px-3"></td>
                                             </tr>
                                         </tfoot>
                                     </table>
@@ -796,11 +848,15 @@ const Trading = () => {
                                             ))}
                                         </tbody>
                                         <tfoot>
-                                            <tr className="bg-gray-50 dark:bg-gray-800 font-bold border-t border-gray-200 dark:border-gray-700 text-red-500">
-                                                <td className="py-1.5 px-3 text-left">Total Qty</td>
-                                                <td colSpan="2" className="py-1.5 px-3 text-right">
-                                                    {marketDepth.marketDepth.sellMarketDepthList.reduce((acc, row) => acc + (row.quantity || 0), 0)}
+                                            <tr className="bg-gray-50 dark:bg-gray-800 font-bold border-t border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white">
+                                                <td className="py-2 px-3 text-left">Total Sell Qty</td>
+                                                <td className="py-2 text-right">
+                                                    {marketDepth.totalSellQty != null
+                                                        ? marketDepth.totalSellQty.toLocaleString()
+                                                        : marketDepth.marketDepth.sellMarketDepthList.reduce((acc, row) => acc + (row.quantity || 0), 0).toLocaleString()
+                                                    }
                                                 </td>
+                                                <td className="py-2 px-3 text-right"></td>
                                             </tr>
                                         </tfoot>
                                     </table>
@@ -835,126 +891,203 @@ const Trading = () => {
                             </div>
                         </div>
                     </div>
+
                 </div>
 
                 {/* RIGHT COLUMN: Watchlist */}
-                <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden sticky top-24">
-                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-                        <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <i className="fas fa-list text-blue-500"></i> Watchlist
-                        </h2>
-                        {wlSelectedGroup && (
-                            <div className="relative" ref={wlSearchRef}>
-                                <button
-                                    onClick={() => { setWlShowSearch(!wlShowSearch); if (!wlShowSearch) setTimeout(() => document.getElementById('wl-trading-search')?.focus(), 100); }}
-                                    className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-[10px] font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                                >
-                                    <i className="fas fa-plus text-[8px]"></i> Add
-                                </button>
-                                {wlShowSearch && (
-                                    <div className="absolute right-0 top-full mt-2 w-60 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
-                                        <div className="p-2 border-b border-gray-100 dark:border-gray-700">
-                                            <input
-                                                id="wl-trading-search"
-                                                type="text"
-                                                value={wlSearchQuery}
-                                                onChange={(e) => wlHandleSearch(e.target.value)}
-                                                placeholder="Search symbol..."
-                                                className="w-full px-3 py-1.5 bg-gray-100 dark:bg-gray-900 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                                                autoComplete="off"
-                                            />
+                <div className="relative min-h-[500px]">
+                    {/* Action Confirmation Sidebar Modal */}
+                    {showConfirm && (
+                        <div className="absolute inset-0 z-50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md rounded-3xl border border-gray-100 dark:border-gray-700 shadow-2xl flex flex-col p-5 animate-in fade-in slide-in-from-right-8 duration-300 overflow-y-auto">
+                            <div className="flex flex-col items-center text-center gap-3 mb-4 mt-2">
+                                <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 ${mode === 'buy' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                                    <i className={`fas fa-${mode === 'buy' ? 'arrow-up text-green-500' : 'arrow-down text-red-500'} text-2xl`}></i>
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black dark:text-white leading-tight">Confirm</h3>
+                                    <p className={`text-[10px] font-bold uppercase tracking-wider ${mode === 'buy' ? 'text-green-500' : 'text-red-500'}`}>{mode} ORDER</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-gray-50 dark:bg-gray-800/80 p-4 rounded-2xl space-y-3 mb-6 text-sm flex-1 border border-gray-100 dark:border-gray-700/50">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-500 text-xs font-bold">Stock</span>
+                                    <span className="font-black dark:text-white text-base">{order.symbol}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-500 text-xs font-bold">Quantity</span>
+                                    <span className="font-bold dark:text-gray-300">{order.qty}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-500 text-xs font-bold">Price</span>
+                                    <span className="font-bold dark:text-gray-300">Rs. {order.price || 'Market'}</span>
+                                </div>
+
+                                {calcResult && (
+                                    <div className="pt-3 mt-3 border-t border-dashed border-gray-200 dark:border-gray-700 space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wide">Commission</span>
+                                            <span className="font-bold text-xs dark:text-gray-400">Rs. {calcResult.commission}</span>
                                         </div>
-                                        <div className="max-h-48 overflow-y-auto">
-                                            {wlSearchLoading ? (
-                                                <div className="p-3 text-center text-[10px] text-gray-400">Searching...</div>
-                                            ) : wlSearchQuery.length < 2 ? (
-                                                <div className="p-3 text-center text-[10px] text-gray-400">Type 2+ chars</div>
-                                            ) : wlSearchResults.length === 0 ? (
-                                                <div className="p-3 text-center text-[10px] text-gray-400">No results</div>
-                                            ) : (
-                                                wlSearchResults.map(s => (
-                                                    <button
-                                                        key={s.id}
-                                                        onClick={() => wlHandleAdd(s)}
-                                                        className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-50 dark:border-gray-700/50 last:border-0 flex justify-between items-center group"
-                                                    >
-                                                        <div>
-                                                            <span className="block font-bold text-gray-800 dark:text-white text-xs">{s.symbol}</span>
-                                                            <span className="block text-[10px] text-gray-500 truncate max-w-[120px]">{s.name}</span>
-                                                        </div>
-                                                        <span className="text-blue-600 opacity-0 group-hover:opacity-100 text-[10px] font-bold">+ ADD</span>
-                                                    </button>
-                                                ))
-                                            )}
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wide">SEBON/DP</span>
+                                            <span className="font-bold text-xs dark:text-gray-400">Rs. {(parseFloat(calcResult.sebon_fee) + parseFloat(calcResult.dp_fee)).toFixed(2)}</span>
+                                        </div>
+                                        <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                                            <span className="text-gray-800 dark:text-white font-black text-xs uppercase">Net Amount</span>
+                                            <span className="font-black text-blue-600 dark:text-blue-400 text-sm">Rs. {
+                                                mode === 'buy'
+                                                    ? parseFloat(calcResult.total_cost).toLocaleString()
+                                                    : parseFloat(calcResult.net_receivable).toLocaleString()
+                                            }</span>
                                         </div>
                                     </div>
                                 )}
                             </div>
-                        )}
-                    </div>
 
-                    {/* Group Tabs */}
-                    {wlGroups.length > 1 && (
-                        <div className="flex gap-1 p-2 overflow-x-auto border-b border-gray-100 dark:border-gray-700 bg-gray-50/30 dark:bg-gray-900/20">
-                            {wlGroups.map((group) => (
+                            <div className="flex flex-col gap-2 shrink-0 mt-auto pb-2">
                                 <button
-                                    key={group.id}
-                                    onClick={() => { setWlSelectedGroup(group); fetchWatchlistItems(group.id); }}
-                                    className={`px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition-all ${wlSelectedGroup?.id === group.id
-                                        ? 'bg-blue-600 text-white'
-                                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                        }`}
+                                    onClick={handleConfirm}
+                                    className={`w-full py-3.5 rounded-xl font-black text-white transition-all text-sm shadow-xl active:scale-95 ${mode === 'buy' ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20' : 'bg-red-500 hover:bg-red-600 shadow-red-500/20'}`}
                                 >
-                                    {group.name}
+                                    CONFIRM
                                 </button>
-                            ))}
+                                <button
+                                    onClick={() => setShowConfirm(false)}
+                                    className="w-full py-2.5 rounded-xl font-bold text-gray-500 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-gray-400 transition-colors text-xs"
+                                >
+                                    CANCEL
+                                </button>
+                            </div>
                         </div>
                     )}
 
-                    <div className="flex flex-col">
-                        {wlLoading ? (
-                            <div className="p-6 text-center text-xs text-gray-400">Loading...</div>
-                        ) : wlGroups.length === 0 ? (
-                            <div className="p-6 text-center">
-                                <p className="text-xs text-gray-400">No watchlists yet.</p>
-                                <p className="text-[10px] text-gray-400 mt-1">Create one from the Dashboard.</p>
-                            </div>
-                        ) : wlItems.length === 0 ? (
-                            <div className="p-6 text-center">
-                                <p className="text-xs text-gray-400">No stocks in "{wlSelectedGroup?.name}"</p>
-                            </div>
-                        ) : (
-                            wlItems.map((item) => {
-                                const stock = item.stock_details;
-                                if (!stock) return null;
-                                const changePct = parseFloat(stock.change_percent || 0);
-                                return (
-                                    <div
-                                        key={item.id}
-                                        className="flex justify-between items-center p-3 border-b border-gray-100 dark:border-gray-700 cursor-pointer hover:bg-blue-50/50 dark:hover:bg-gray-700/50 transition-colors last:border-b-0 group"
-                                        onClick={() => selectStock({ symbol: stock.symbol })}
+                    <div className="absolute inset-0 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
+                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
+                            <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <i className="fas fa-list text-blue-500"></i> Watchlist
+                            </h2>
+                            {wlSelectedGroup && (
+                                <div className="relative" ref={wlSearchRef}>
+                                    <button
+                                        onClick={() => { setWlShowSearch(!wlShowSearch); if (!wlShowSearch) setTimeout(() => document.getElementById('wl-trading-search')?.focus(), 100); }}
+                                        className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-[10px] font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
                                     >
-                                        <div className="flex flex-col">
-                                            <strong className="text-sm font-bold text-gray-900 dark:text-white">{stock.symbol}</strong>
-                                            <span className="text-[10px] text-gray-500 truncate max-w-[120px]">{stock.name}</span>
+                                        <i className="fas fa-plus text-[8px]"></i> Add
+                                    </button>
+                                    {wlShowSearch && (
+                                        <div className="absolute right-0 top-full mt-2 w-60 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
+                                            <div className="p-2 border-b border-gray-100 dark:border-gray-700">
+                                                <input
+                                                    id="wl-trading-search"
+                                                    type="text"
+                                                    value={wlSearchQuery}
+                                                    onChange={(e) => wlHandleSearch(e.target.value)}
+                                                    placeholder="Search symbol..."
+                                                    className="w-full px-3 py-1.5 bg-gray-100 dark:bg-gray-900 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                                                    autoComplete="off"
+                                                />
+                                            </div>
+                                            <div className="max-h-48 overflow-y-auto">
+                                                {wlSearchLoading ? (
+                                                    <div className="p-3 text-center text-[10px] text-gray-400">Searching...</div>
+                                                ) : wlSearchQuery.length < 2 ? (
+                                                    <div className="p-3 text-center text-[10px] text-gray-400">Type 2+ chars</div>
+                                                ) : wlSearchResults.length === 0 ? (
+                                                    <div className="p-3 text-center text-[10px] text-gray-400">No results</div>
+                                                ) : (
+                                                    wlSearchResults.map(s => (
+                                                        <button
+                                                            key={s.id}
+                                                            onClick={() => wlHandleAdd(s)}
+                                                            className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-50 dark:border-gray-700/50 last:border-0 flex justify-between items-center group"
+                                                        >
+                                                            <div>
+                                                                <span className="block font-bold text-gray-800 dark:text-white text-xs">{s.symbol}</span>
+                                                                <span className="block text-[10px] text-gray-500 truncate max-w-[120px]">{s.name}</span>
+                                                            </div>
+                                                            <span className="text-blue-600 opacity-0 group-hover:opacity-100 text-[10px] font-bold">+ ADD</span>
+                                                        </button>
+                                                    ))
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="flex flex-col items-end">
-                                            <strong className="text-sm font-bold text-gray-900 dark:text-white">{parseFloat(stock.last_price || 0).toLocaleString()}</strong>
-                                            <span className={`text-[10px] font-bold ${changePct > 0 ? 'text-green-500' : changePct < 0 ? 'text-red-500' : 'text-gray-500'}`}>
-                                                {changePct > 0 ? '+' : ''}{changePct.toFixed(2)}%
-                                            </span>
-                                        </div>
-                                        <button
-                                            onClick={(e) => wlHandleRemove(e, item.id)}
-                                            className="ml-1 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
-                                            title="Remove"
-                                        >
-                                            <i className="fas fa-times text-[10px]"></i>
-                                        </button>
-                                    </div>
-                                );
-                            })
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Group Tabs */}
+                        {wlGroups.length > 1 && (
+                            <div className="flex gap-1 p-2 overflow-x-auto border-b border-gray-100 dark:border-gray-700 bg-gray-50/30 dark:bg-gray-900/20 shrink-0">
+                                {wlGroups.map((group) => (
+                                    <button
+                                        key={group.id}
+                                        onClick={() => { setWlSelectedGroup(group); fetchWatchlistItems(group.id); }}
+                                        className={`px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition-all ${wlSelectedGroup?.id === group.id
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                            }`}
+                                    >
+                                        {group.name}
+                                    </button>
+                                ))}
+                            </div>
                         )}
+
+                        <div className="flex flex-col flex-1 overflow-y-auto">
+                            {wlLoading ? (
+                                <div className="p-6 text-center text-xs text-gray-400">Loading...</div>
+                            ) : wlGroups.length === 0 ? (
+                                <div className="p-6 text-center">
+                                    <p className="text-xs text-gray-400">No watchlists yet.</p>
+                                    <p className="text-[10px] text-gray-400 mt-1">Create one from the Dashboard.</p>
+                                </div>
+                            ) : wlItems.length === 0 ? (
+                                <div className="p-6 text-center">
+                                    <p className="text-xs text-gray-400">No stocks in "{wlSelectedGroup?.name}"</p>
+                                </div>
+                            ) : (
+                                wlItems.map((item) => {
+                                    // Use original static details as fallback
+                                    let stock = item.stock_details;
+
+                                    // Override with live data from Context if available
+                                    const liveStock = stocks.find(s => s.symbol === item.stock_symbol);
+                                    if (liveStock) {
+                                        stock = liveStock;
+                                    }
+
+                                    if (!stock) return null;
+                                    const changePct = parseFloat(stock.change_percent || 0);
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            className="flex justify-between items-center p-3 border-b border-gray-100 dark:border-gray-700 cursor-pointer hover:bg-blue-50/50 dark:hover:bg-gray-700/50 transition-colors last:border-b-0 group shrink-0"
+                                            onClick={() => selectStock({ symbol: stock.symbol || item.stock_symbol })}
+                                        >
+                                            <div className="flex flex-col">
+                                                <strong className="text-sm font-bold text-gray-900 dark:text-white">{stock.symbol || item.stock_symbol}</strong>
+                                                <span className="text-[10px] text-gray-500 truncate max-w-[120px]">{stock.name || 'Unknown'}</span>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <strong className="text-sm font-bold text-gray-900 dark:text-white">{parseFloat(stock.last_price || 0).toLocaleString()}</strong>
+                                                <span className={`text-[10px] font-bold ${changePct > 0 ? 'text-green-500' : changePct < 0 ? 'text-red-500' : 'text-gray-500'}`}>
+                                                    {changePct > 0 ? '+' : ''}{changePct.toFixed(2)}%
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={(e) => wlHandleRemoveClick(e, item)}
+                                                className="ml-1 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                                                title="Remove"
+                                            >
+                                                <i className="fas fa-times text-[10px]"></i>
+                                            </button>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1067,19 +1200,43 @@ const Trading = () => {
                                         </td>
                                         {ordersTab === 'active' && (
                                             <td className="py-4 text-right">
-                                                <div className="flex justify-end gap-2">
+                                                <div className="flex justify-end gap-2 relative">
                                                     <button
                                                         onClick={() => handleEditOrder(o)}
                                                         className="text-xs font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                                                     >
                                                         Edit
                                                     </button>
+
                                                     <button
-                                                        onClick={() => handleCancelOrder(o)}
-                                                        className="text-xs font-bold text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                                                        onClick={() => setConfirmingCancelId(o.id)}
+                                                        className="text-xs font-bold text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 relative"
                                                     >
                                                         Cancel
                                                     </button>
+
+                                                    {/* Inline Cancel Confirmation Popup */}
+                                                    {confirmingCancelId === o.id && (
+                                                        <div className="absolute bottom-full right-0 mb-2 w-32 bg-white dark:bg-gray-800 shadow-xl border border-gray-100 dark:border-gray-700 rounded-xl p-2 z-50 animate-in fade-in zoom-in duration-200">
+                                                            <div className="text-center text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-2">Cancel Order?</div>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => setConfirmingCancelId(null)}
+                                                                    className="flex-1 py-1 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 text-[10px] font-bold transition-colors"
+                                                                >
+                                                                    No
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleCancelOrder(o.id)}
+                                                                    className="flex-1 py-1 rounded bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold transition-colors shadow-sm shadow-red-500/20"
+                                                                >
+                                                                    Yes
+                                                                </button>
+                                                            </div>
+                                                            {/* Little triangle pointer (tooltip arrow) */}
+                                                            <div className="absolute -bottom-1 right-3 w-2 h-2 bg-white dark:bg-gray-800 border-b border-r border-gray-100 dark:border-gray-700 transform rotate-45"></div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
                                         )}
@@ -1142,67 +1299,36 @@ const Trading = () => {
                 )}
             </div>
 
-            {/* Confirmation Modal */}
+            {/* Watchlist Confirmation Modal */}
             {
-                showConfirm && (
+                showWlConfirm && wlItemToRemove && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-sm w-full p-6 border border-gray-100 dark:border-gray-700 transform transition-all scale-100">
-                            <h3 className="text-xl font-black mb-4 dark:text-white">Confirm Order</h3>
-
-                            <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-xl space-y-3 mb-6">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500 text-sm">Action</span>
-                                    <span className={`font-bold uppercase ${mode === 'buy' ? 'text-green-500' : 'text-red-500'}`}>{mode}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500 text-sm">Stock</span>
-                                    <span className="font-bold dark:text-white">{order.symbol}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500 text-sm">Quantity</span>
-                                    <span className="font-bold dark:text-white">{order.qty}</span>
-                                </div>
-                                {calcResult && (
-                                    <>
-                                        <div className="border-t border-dashed border-gray-200 dark:border-gray-700 pt-2 flex justify-between">
-                                            <span className="text-gray-500 text-sm">Commission</span>
-                                            <span className="font-bold dark:text-gray-300">Rs. {calcResult.commission}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-500 text-sm">SEBON/DP</span>
-                                            <span className="font-bold dark:text-gray-300">Rs. {(parseFloat(calcResult.sebon_fee) + parseFloat(calcResult.dp_fee)).toFixed(2)}</span>
-                                        </div>
-                                        <div className="pt-2 mt-1 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-                                            <span className="text-gray-800 dark:text-white font-bold text-sm">Net Amount</span>
-                                            <span className="font-black text-blue-600 dark:text-blue-400">Rs. {
-                                                mode === 'buy'
-                                                    ? parseFloat(calcResult.total_cost).toLocaleString()
-                                                    : parseFloat(calcResult.net_receivable).toLocaleString()
-                                            }</span>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-
+                            <h3 className="text-xl font-black mb-4 dark:text-white">Remove from Watchlist</h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 font-medium">
+                                Are you sure you want to remove <strong className="text-gray-900 dark:text-white">{wlItemToRemove.stock_symbol || 'this stock'}</strong> from <strong className="text-gray-900 dark:text-white">{wlSelectedGroup?.name}</strong>?
+                            </p>
                             <div className="grid grid-cols-2 gap-4">
                                 <button
-                                    onClick={() => setShowConfirm(false)}
+                                    onClick={() => { setShowWlConfirm(false); setWlItemToRemove(null); }}
                                     className="py-3 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    onClick={handleConfirm}
-                                    className={`py-3 rounded-xl font-bold text-white transition-colors ${mode === 'buy' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'
-                                        }`}
+                                    onClick={handleWlRemoveConfirm}
+                                    className="py-3 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
                                 >
-                                    Confirm
+                                    Remove
                                 </button>
                             </div>
                         </div>
                     </div>
                 )
             }
+
+
+
         </div >
     );
 };

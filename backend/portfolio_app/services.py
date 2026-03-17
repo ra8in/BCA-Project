@@ -8,6 +8,7 @@ against current market prices.
 import logging
 from decimal import Decimal
 from django.db import transaction
+from .fees import calculate_buy_fees, calculate_sell_fees
 
 logger = logging.getLogger(__name__)
 
@@ -98,12 +99,9 @@ def _execute_pending_buy(order, execution_price):
         quantity = order.quantity
         stock = order.stock
         
-        # Calculate costs (same as BuyStockView)
+        # Calculate costs (centralized fees)
         amount = execution_price * quantity
-        commission = max(Decimal('10'), amount * Decimal('0.004'))
-        sebon_fee = amount * Decimal('0.00015')
-        dp_fee = Decimal('25')
-        total_fees = commission + sebon_fee + dp_fee
+        total_fees, _ = calculate_buy_fees(amount)
         total_cost = amount + total_fees
         effective_price = total_cost / quantity
         
@@ -194,22 +192,12 @@ def _execute_pending_sell(order, execution_price):
             logger.warning(f"Order {order.id} rejected: Insufficient shares ({holding.quantity} < {quantity})")
             return
         
-        # Calculate fees (same as SellStockView)
+        # Calculate fees (centralized)
         gross_amount = execution_price * quantity
-        commission = max(Decimal('10'), gross_amount * Decimal('0.004'))
-        sebon_fee = gross_amount * Decimal('0.00015')
-        dp_fee = Decimal('25')
-        
-        # CGT: 5% of profit
         wacc = holding.average_buy_price
         cost_basis = wacc * quantity
         gross_profit = gross_amount - cost_basis
-        
-        cgt = Decimal('0')
-        if gross_profit > 0:
-            cgt = gross_profit * Decimal('0.05')
-        
-        total_deductions = commission + sebon_fee + dp_fee + cgt
+        total_deductions, _ = calculate_sell_fees(gross_amount, gross_profit)
         net_proceeds = gross_amount - total_deductions
         
         # Update balance

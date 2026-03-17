@@ -137,7 +137,7 @@ const Alerts = () => {
                         <div>
                             <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Stock</label>
                             <StockSearchInput
-                                placeholder="Search e.g. NABIL"
+                                placeholder="Search Symbol"
                                 initialValue={selectedStock?.symbol || ''}
                                 onSelect={(stock) => setSelectedStock(stock)}
                             />
@@ -159,7 +159,7 @@ const Alerts = () => {
                                 {['ABOVE', 'BELOW'].map(t => (
                                     <button key={t} onClick={() => setAlertType(t)}
                                         className={`flex-1 py-2 rounded-lg text-sm font-bold ${alertType === t ? 'bg-white dark:bg-gray-700 shadow' : 'text-gray-400'}`}>
-                                        {t === 'ABOVE' ? '📈 Above' : '📉 Below'}
+                                        {t === 'ABOVE' ? 'Above' : 'Below'}
                                     </button>
                                 ))}
                             </div>
@@ -167,11 +167,11 @@ const Alerts = () => {
                         <div>
                             <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Target Price</label>
                             <input type="number" value={targetPrice} onChange={(e) => setTargetPrice(e.target.value)}
-                                placeholder="1000" className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl px-4 py-3 font-bold outline-none" />
+                                placeholder="Enter Price" className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl px-4 py-3 font-bold outline-none" />
                         </div>
                         <button onClick={handleCreateAlert} disabled={creating || !selectedStock || !targetPrice}
                             className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold disabled:opacity-50">
-                            {creating ? 'Creating...' : '🔔 Set Alert'}
+                            {creating ? 'Creating...' : 'Set Alert'}
                         </button>
                     </div>
                 </div>
@@ -180,7 +180,7 @@ const Alerts = () => {
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <h3 className="text-xl font-bold mb-6 text-gray-800 dark:text-white">Your Alerts</h3>
                     {alerts.length === 0 ? (
-                        <div className="text-center py-12 text-gray-400">🔕 No alerts set</div>
+                        <div className="text-center py-12 text-gray-400">No alerts set</div>
                     ) : (
                         <div className="space-y-3">
                             {alerts.map(alert => (
@@ -201,8 +201,8 @@ const Alerts = () => {
                                                     <div className="flex gap-2">
                                                         <select value={editType} onChange={(e) => setEditType(e.target.value)}
                                                             className="flex-1 px-2 py-1 text-sm bg-gray-50 dark:bg-gray-800 rounded border dark:border-gray-600 font-bold">
-                                                            <option value="ABOVE">📈 Above</option>
-                                                            <option value="BELOW">📉 Below</option>
+                                                            <option value="ABOVE">Above</option>
+                                                            <option value="BELOW">Below</option>
                                                         </select>
                                                         <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
                                                             className="w-24 px-2 py-1 text-sm bg-gray-50 dark:bg-gray-800 rounded border dark:border-gray-600 font-bold" />
@@ -227,9 +227,13 @@ const Alerts = () => {
                                         </div>
                                         <div className="flex gap-1">
                                             {alert.is_active && (
-                                                <button onClick={() => openEdit(alert)} className="p-1 hover:bg-blue-100 rounded text-blue-500">✏️</button>
+                                                <button onClick={() => openEdit(alert)} className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg text-blue-500 transition-colors" title="Edit Alert">
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
                                             )}
-                                            <button onClick={() => openDelete(alert.id)} className="p-1 hover:bg-red-100 rounded text-red-500">🗑️</button>
+                                            <button onClick={() => openDelete(alert.id)} className="p-2 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg text-red-500 transition-colors" title="Delete Alert">
+                                                <i className="fas fa-trash"></i>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

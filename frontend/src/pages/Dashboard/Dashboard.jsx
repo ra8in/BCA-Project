@@ -107,7 +107,7 @@ const Dashboard = () => {
 
                 {/* Top Gainers */}
                 <TableContainer
-                    title="🚀 Top Gainers"
+                    title="Top Gainers"
                     titleColor="text-green-600"
                     onViewAll={() => navigate('/market/gainers')}
                 >
@@ -119,15 +119,23 @@ const Dashboard = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {topGainers.slice(0, 10).map(stock => (
-                            <StockRow key={stock.id} stock={stock} />
-                        ))}
+                        {topGainers.length === 0 ? (
+                            <tr>
+                                <td colSpan="3" className="py-6 text-center text-gray-400 dark:text-gray-500 text-sm italic">
+                                    No data available — market may be closed
+                                </td>
+                            </tr>
+                        ) : (
+                            topGainers.slice(0, 10).map(stock => (
+                                <StockRow key={stock.id} stock={stock} />
+                            ))
+                        )}
                     </tbody>
                 </TableContainer>
 
                 {/* Top Losers */}
                 <TableContainer
-                    title="📉 Top Losers"
+                    title="Top Losers"
                     titleColor="text-red-600"
                     onViewAll={() => navigate('/market/losers')}
                 >
@@ -139,15 +147,23 @@ const Dashboard = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {topLosers.slice(0, 10).map(stock => (
-                            <StockRow key={stock.id} stock={stock} />
-                        ))}
+                        {topLosers.length === 0 ? (
+                            <tr>
+                                <td colSpan="3" className="py-6 text-center text-gray-400 dark:text-gray-500 text-sm italic">
+                                    No data available — market may be closed
+                                </td>
+                            </tr>
+                        ) : (
+                            topLosers.slice(0, 10).map(stock => (
+                                <StockRow key={stock.id} stock={stock} />
+                            ))
+                        )}
                     </tbody>
                 </TableContainer>
 
                 {/* Top Turnover */}
                 <TableContainer
-                    title="💰 Top Turnover"
+                    title="Top Turnover"
                     titleColor="text-blue-600"
                     onViewAll={() => navigate('/market/turnover')}
                 >
@@ -159,9 +175,17 @@ const Dashboard = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {topTurnover.slice(0, 10).map(stock => (
-                            <TurnoverRow key={stock.id} stock={stock} />
-                        ))}
+                        {topTurnover.length === 0 ? (
+                            <tr>
+                                <td colSpan="3" className="py-6 text-center text-gray-400 dark:text-gray-500 text-sm italic">
+                                    No data available — market may be closed
+                                </td>
+                            </tr>
+                        ) : (
+                            topTurnover.slice(0, 10).map(stock => (
+                                <TurnoverRow key={stock.id} stock={stock} />
+                            ))
+                        )}
                     </tbody>
                 </TableContainer>
 

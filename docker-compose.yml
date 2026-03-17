@@ -41,7 +41,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DEBUG=${DEBUG:-True}
+      - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-docker-dev-key-change-in-production}
       - DATABASE_URL=postgres://postgres:postgres@db:5432/paper_trading_db
       - REDIS_URL=redis://redis:6379/0
